@@ -1,0 +1,86 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: Firebase Auth uid
+// Fields (all optional, merged on write):
+//   - globalInflation: number
+//   - globalReturn: number
+//   - today: string (ISO 8601 date)
+//
+// Subcollection: users/{userId}/goals
+// Document ID: goal id
+// Fields:
+//   - id: string (required)
+//   - name: string (required, max 200)
+//   - account: string (required, max 100)
+//   - targetCost: number (required, >= 0)
+//   - startDate: string (required, ISO 8601)
+//   - targetDate: string (required, ISO 8601)
+//   - currentSavings: number (required, >= 0)
+//   - expectedReturn: number (optional)
+//   - inflationRate: number (optional)
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidOptionalNumber(field) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] is number;
+    }
+
+    function isValidGoal(data) {
+      return data.keys().hasAll([
+          'id', 'name', 'account', 'targetCost',
+          'startDate', 'targetDate', 'currentSavings'
+        ]) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 64 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+        data.account is string && data.account.size() > 0 && data.account.size() <= 100 &&
+        data.targetCost is number && data.targetCost >= 0 &&
+        data.startDate is string && data.startDate.size() <= 40 &&
+        data.targetDate is string && data.targetDate.size() <= 40 &&
+        data.currentSavings is number && data.currentSavings >= 0 &&
+        isValidOptionalNumber('expectedReturn') &&
+        isValidOptionalNumber('inflationRate') &&
+        data.keys().hasOnly([
+          'id', 'name', 'account', 'targetCost',
+          'startDate', 'targetDate', 'currentSavings',
+          'expectedReturn', 'inflationRate'
+        ]);
+    }
+
+    function isValidUserSettings(data) {
+      return data.keys().hasOnly(['globalInflation', 'globalReturn', 'today']) &&
+        (!('globalInflation' in data) || data.globalInflation is number) &&
+        (!('globalReturn' in data) || data.globalReturn is number) &&
+        (!('today' in data) || (data.today is string && data.today.size() <= 40));
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUserSettings(request.resource.data);
+      allow delete: if isOwner(userId);
+
+      match /goals/{goalId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidGoal(request.resource.data);
+        allow update: if isOwner(userId) && isValidGoal(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

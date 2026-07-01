@@ -1,0 +1,19 @@
+{
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "LifeGoal AI",
+        "supportEmail": "support@lifegoal.app",
+        "authorizedRedirectUris": []
+      }
+    },
+    "authorizedDomains": [
+      "localhost"
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "project_info": {
+    "project_number": "599945759594",
+    "firebase_url": "https://mymaps-b534f.firebaseio.com",
+    "project_id": "mymaps-b534f",
+    "storage_bucket": "mymaps-b534f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:599945759594:android:c9c49854e4d00f25",
+        "android_client_info": {
+          "package_name": "com.example.ankushwaha.mymaps"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "599945759594-ctl0gd8nvfvcqio5cae4nqc14bbnk40i.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.ankushwaha.mymaps",
+            "certificate_hash": "7b55987fde71d542ca5e49f3f5c54ece0d4cc24e"
+          }
+        },
+        {
+          "client_id": "599945759594-avso0q2ljq9u0ge0eb1nvrrqndssm8td.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjY4l6T1StceUty2r3DwhcGOFwN4TX0co"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "599945759594-avso0q2ljq9u0ge0eb1nvrrqndssm8td.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:599945759594:android:17aa1b6d4e05f869e1f313",
+        "android_client_info": {
+          "package_name": "com.lifegoal.app.lifegoal_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "599945759594-e5aqdb9saat2q6djdjb8cf8980a3o73n.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lifegoal.app.lifegoal_app",
+            "certificate_hash": "f760d146a1f43d318b74a05ad49cc5cd19409723"
+          }
+        },
+        {
+          "client_id": "599945759594-avso0q2ljq9u0ge0eb1nvrrqndssm8td.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjY4l6T1StceUty2r3DwhcGOFwN4TX0co"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "599945759594-avso0q2ljq9u0ge0eb1nvrrqndssm8td.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
