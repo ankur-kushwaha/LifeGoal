@@ -41,6 +41,7 @@ dependencies:
   firebase_auth: ^5.1.1
   cloud_firestore: ^5.0.1
   google_sign_in: ^6.2.2
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
@@ -98,6 +99,11 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
+  web:
+    generate: true
+    image_path: assets/icon/app_icon.png
+    background_color: "#00A37B"
+    theme_color: "#00A37B"
   image_path: assets/icon/app_icon.png
   adaptive_icon_background: "#00A37B"
   adaptive_icon_foreground: assets/icon/app_icon.png

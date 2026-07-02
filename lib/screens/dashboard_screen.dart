@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/goal_model.dart';
 import '../providers/goal_provider.dart';
 import '../widgets/app_logo.dart';
+import '../widgets/pwa_install_banner.dart';
 import 'family_screen.dart';
 import 'goal_detail_screen.dart';
 import 'goal_form_screen.dart';
@@ -147,6 +148,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
+                  // PWA install prompt (web only)
+                  const PwaInstallBanner(),
+
                   // Global Settings Drawer Section (Collapsible)
                   AnimatedCrossFade(
                     firstChild: const SizedBox.shrink(),

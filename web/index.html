@@ -6,17 +6,20 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="LifeGoal AI — inflation-aware financial goal planner with family sharing and SIP tracking.">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
+  <!-- PWA -->
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="LifeGoal AI">
   <meta name="theme-color" content="#00A37B">
+  <meta name="application-name" content="LifeGoal AI">
+  <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
   <link rel="icon" type="image/png" href="favicon.png">
 
   <title>LifeGoal AI</title>
-  <link rel="manifest" href="manifest.json">
 
   <style id="splash-screen-style">
     html { height: 100%; }
@@ -32,18 +35,34 @@
       left: 50%;
       transform: translate(-50%, -50%);
     }
-    .contain {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
   </style>
   <script id="splash-screen-script">
     function removeSplashFromWeb() {
       document.getElementById("splash")?.remove();
       document.body.style.background = "transparent";
     }
+  </script>
+  <script>
+    window.deferredPwaPrompt = null;
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      window.deferredPwaPrompt = event;
+      window.dispatchEvent(new Event('pwa-install-available'));
+    });
+
+    window.addEventListener('appinstalled', () => {
+      window.deferredPwaPrompt = null;
+      window.dispatchEvent(new Event('pwa-installed'));
+    });
+
+    window.installPwaApp = async function () {
+      if (!window.deferredPwaPrompt) return false;
+      window.deferredPwaPrompt.prompt();
+      const choice = await window.deferredPwaPrompt.userChoice;
+      window.deferredPwaPrompt = null;
+      return choice.outcome === 'accepted';
+    };
   </script>
 </head>
 <body>
@@ -53,5 +72,14 @@
     <img class="center" aria-hidden="true" src="splash/img/light-1x.png" alt="">
   </picture>
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((error) => {
+          console.warn('PWA service worker registration failed:', error);
+        });
+      });
+    }
+  </script>
 </body>
 </html>

@@ -247,3 +247,12 @@ Live URLs after deploy:
 flutter build web --release
 npx -y firebase-tools@latest emulators:start --only hosting
 ```
+
+### PWA (installable web app)
+
+The web build is a Progressive Web App:
+- **Install** from Chrome/Edge (address bar or in-app banner on the dashboard)
+- **Offline shell** — app loads from cache; data syncs when back online (Firestore offline persistence)
+- **Home screen icon** on Android and iOS Safari (Add to Home Screen)
+
+After changing `web/sw.js`, bump `CACHE_NAME` inside that file before redeploying so clients pick up updates.
