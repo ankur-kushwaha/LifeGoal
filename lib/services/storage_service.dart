@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../constants.dart';
 import '../models/goal_model.dart';
 
 abstract class BaseStorageService {
@@ -14,7 +16,13 @@ abstract class BaseStorageService {
 }
 
 class FirestoreStorageService implements BaseStorageService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  FirestoreStorageService()
+      : _firestore = FirebaseFirestore.instanceFor(
+          app: Firebase.app(),
+          databaseId: kFirestoreDatabaseId,
+        );
+
+  final FirebaseFirestore _firestore;
 
   @override
   Stream<List<GoalModel>> streamGoals(String userId) {

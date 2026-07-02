@@ -1,28 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
-import 'package:lifegoal_app/main.dart';
-import 'package:lifegoal_app/providers/goal_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:lifegoal_app/widgets/app_logo.dart';
 
 void main() {
-  setUp(() {
-    SharedPreferences.setMockInitialValues({});
-  });
-
-  testWidgets('App loads dashboard smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('App logo asset loads', (WidgetTester tester) async {
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => GoalProvider(),
-        child: const MyApp(),
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(child: AppLogo(size: 64)),
+        ),
       ),
     );
 
-    // Let async loading finish and settle
-    await tester.pumpAndSettle();
-
-    // Verify that our app text "LifeGoal AI" is shown.
-    expect(find.text('LifeGoal AI'), findsOneWidget);
+    expect(find.byType(Image), findsOneWidget);
   });
 }

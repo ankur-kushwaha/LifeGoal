@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../providers/goal_provider.dart';
 import '../services/auth_service.dart';
+import '../widgets/app_logo.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -11,7 +12,7 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
+class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -412,18 +413,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               Center(
                 child: Hero(
                   tag: 'logo',
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: kMoneyGreen.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.track_changes,
-                      size: 64,
-                      color: kMoneyGreen,
-                    ),
-                  ),
+                  child: const AppLogo(size: 80),
                 ),
               ),
               const SizedBox(height: 16),

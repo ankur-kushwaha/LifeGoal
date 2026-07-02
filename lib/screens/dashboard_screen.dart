@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/goal_model.dart';
 import '../providers/goal_provider.dart';
+import '../widgets/app_logo.dart';
 import 'goal_detail_screen.dart';
 import 'goal_form_screen.dart';
 
@@ -48,7 +49,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.track_changes, color: kMoneyGreen, size: 24),
+                const AppLogo(size: 28, showBackground: false),
                 const SizedBox(width: 8),
                 Text(
                   'LifeGoal AI',
