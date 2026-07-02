@@ -256,3 +256,13 @@ The web build is a Progressive Web App:
 - **Home screen icon** on Android and iOS Safari (Add to Home Screen)
 
 After changing `web/sw.js`, bump `CACHE_NAME` inside that file before redeploying so clients pick up updates.
+
+### Privacy policy URL (Play Store)
+
+Use this URL in Google Play Console and other store listings:
+
+```
+https://mymaps-b534f.web.app/privacy.html
+```
+
+The policy is also available in-app from the account menu and sign-in screen.

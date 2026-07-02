@@ -9,6 +9,7 @@ import '../widgets/pwa_install_banner.dart';
 import 'family_screen.dart';
 import 'goal_detail_screen.dart';
 import 'goal_form_screen.dart';
+import 'privacy_policy_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -94,6 +95,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   context,
                   MaterialPageRoute(builder: (context) => const FamilyScreen()),
                 );
+              } else if (value == 'privacy') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()),
+                );
               } else if (value == 'logout') {
                 await provider.signOut();
               }
@@ -122,6 +128,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Icon(Icons.family_restroom, color: kMoneyGreen, size: 20),
                       SizedBox(width: 8),
                       Text('Manage Family'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem<String>(
+                  value: 'privacy',
+                  child: Row(
+                    children: [
+                      Icon(Icons.privacy_tip_outlined, color: kMoneyGreen, size: 20),
+                      SizedBox(width: 8),
+                      Text('Privacy Policy'),
                     ],
                   ),
                 ),

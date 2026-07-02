@@ -4,6 +4,7 @@ import '../constants.dart';
 import '../providers/goal_provider.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_logo.dart';
+import 'privacy_policy_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -309,6 +310,19 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                         ),
                         const SizedBox(height: 16),
                         _buildGoogleButton(),
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: _isLoading
+                              ? null
+                              : () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()),
+                                  ),
+                          child: const Text(
+                            'Privacy Policy',
+                            style: TextStyle(color: Colors.black45, fontSize: 12),
+                          ),
+                        ),
                       ],
                     ),
                   ),
