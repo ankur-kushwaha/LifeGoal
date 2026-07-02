@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../firebase_options.dart';
 
 abstract class BaseAuthService {
   Stream<String?> get onAuthStateChanged;
@@ -16,6 +19,16 @@ abstract class BaseAuthService {
 }
 
 String authErrorMessage(Object error) {
+  if (error is PlatformException) {
+    final message = error.message ?? '';
+    if (message.contains('ApiException: 10') || message.contains('DEVELOPER_ERROR')) {
+      return 'Google Sign-In is not configured for this build. '
+          'Add the Play Store app signing SHA-1 to Firebase (see README).';
+    }
+    if (error.code == 'sign_in_failed') {
+      return 'Google Sign-In failed. Please try again.';
+    }
+  }
   if (error is FirebaseAuthException) {
     switch (error.code) {
       case 'invalid-email':
@@ -45,7 +58,9 @@ String authErrorMessage(Object error) {
 
 class FirebaseAuthService implements BaseAuthService {
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId: DefaultFirebaseOptions.googleWebClientId,
+  );
 
   @override
   Stream<String?> get onAuthStateChanged =>
