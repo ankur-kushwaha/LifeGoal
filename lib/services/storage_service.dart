@@ -20,7 +20,12 @@ class FirestoreStorageService implements BaseStorageService {
       : _firestore = FirebaseFirestore.instanceFor(
           app: Firebase.app(),
           databaseId: kFirestoreDatabaseId,
-        );
+        ) {
+    _firestore.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  }
 
   final FirebaseFirestore _firestore;
 

@@ -62,7 +62,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             Text(
-              provider.isFirebaseMode ? 'Cloud Connected' : 'Local Offline Mode',
+              provider.isFirebaseMode ? 'Auto-synced to cloud' : 'Offline mode',
               style: TextStyle(
                 fontSize: 10,
                 color: provider.isFirebaseMode ? kMoneyGreen : Colors.amber[800],
@@ -84,11 +84,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               });
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.backup_outlined, color: Colors.black54),
-            tooltip: 'Backup / Restore Data',
-            onPressed: () => _showBackupRestoreDialog(context, provider),
-          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.account_circle, color: kMoneyGreen),
             onSelected: (value) async {
@@ -100,7 +95,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               PopupMenuItem<String>(
                 enabled: false,
                 child: Text(
-                  provider.isFirebaseMode ? 'Cloud Connected' : 'Local Demo Mode',
+                  provider.isFirebaseMode ? 'Auto-synced to cloud' : 'Offline mode',
                   style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54),
                 ),
               ),
@@ -132,10 +127,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: provider.isLoading
           ? const Center(child: CircularProgressIndicator(color: kMoneyGreen))
           : RefreshIndicator(
-              onRefresh: () async {
-                // Shared preferences loads automatically, but we notify listeners just in case
-                provider.notifyListeners();
-              },
+              onRefresh: provider.refreshFromCloud,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
@@ -875,81 +867,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  // Backup & Restore dialog code
-  void _showBackupRestoreDialog(BuildContext context, GoalProvider provider) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final textController = TextEditingController();
-        return AlertDialog(
-          backgroundColor: kCardBg,
-          title: const Text('Backup & Restore Goals', style: TextStyle(color: Colors.black87)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Copy this JSON code block to backup your data, or paste a previously exported JSON block below to restore it.',
-                  style: TextStyle(color: Colors.black54, fontSize: 13),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: textController,
-                  maxLines: 6,
-                  style: TextStyle(color: kMoneyGreen, fontSize: 12, fontFamily: 'monospace'),
-                  decoration: const InputDecoration(
-                    hintText: 'Paste backup JSON here...',
-                    hintStyle: TextStyle(color: Colors.black26),
-                    fillColor: kScaffoldBg,
-                    filled: true,
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text('Copy Current Backup', style: TextStyle(color: kMoneyGreen)),
-              onPressed: () {
-                final backupStr = provider.exportData();
-                // Copy to clipboard
-                textController.text = backupStr;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Backup JSON copied to text field!')),
-                );
-              },
-            ),
-            TextButton(
-              child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
-              onPressed: () => Navigator.pop(context),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: kMoneyGreen, foregroundColor: Colors.white),
-              child: const Text('Restore JSON'),
-              onPressed: () {
-                if (textController.text.trim().isNotEmpty) {
-                  final success = provider.importData(textController.text);
-                  if (success) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Data restored successfully!')),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Failed to restore. Invalid JSON!')),
-                    );
-                  }
-                }
-              },
-            ),
-          ],
-        );
-      },
     );
   }
 

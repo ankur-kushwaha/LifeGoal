@@ -398,8 +398,6 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final provider = Provider.of<GoalProvider>(context);
-    final isFirebase = provider.isFirebaseMode;
 
     return Scaffold(
       backgroundColor: kScaffoldBg,
@@ -428,9 +426,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
               ),
               const SizedBox(height: 8),
               Text(
-                isFirebase
-                    ? 'Sign in with email, Google, or phone to sync your goals'
-                    : 'Running in Local Demo Mode (No Cloud Configured)',
+                'Sign in to sync your goals across devices',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: Colors.black45,
@@ -483,40 +479,6 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-              if (!isFirebase)
-                Card(
-                  color: Colors.amber[50],
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(color: Colors.amber.withOpacity(0.2)),
-                  ),
-                  child: const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.info_outline, color: Colors.amber, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'Demo Mode Active',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          'Run scripts/setup_firebase.sh after firebase login to connect project 599945759594.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12, color: Colors.black54),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
             ],
           ),
         ),
