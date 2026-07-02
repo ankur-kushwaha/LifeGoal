@@ -1,4 +1,4 @@
-// GENERATED from google-services.json — do not edit by hand.
+// GENERATED from Firebase config — do not edit by hand.
 // Re-run: dart run tool/generate_firebase_options.dart
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
@@ -22,8 +22,8 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBjY4l6T1StceUty2r3DwhcGOFwN4TX0co',
-    appId: '1:599945759594:android:17aa1b6d4e05f869e1f313',
+    apiKey: 'AIzaSyAS-pI1BhW-xECiyokWFMFOE8X1wIk63Hw',
+    appId: '1:599945759594:web:3bc2a9ca20bd9e7be1f313',
     messagingSenderId: '599945759594',
     projectId: 'mymaps-b534f',
     authDomain: 'mymaps-b534f.firebaseapp.com',

@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'constants.dart';
 import 'firebase_options.dart';
 import 'providers/goal_provider.dart';
+import 'widgets/app_shell.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/auth_screen.dart';
 
@@ -58,6 +59,7 @@ class MyApp extends StatelessWidget {
           overlayColor: Colors.black26,
         ),
       ),
+      builder: (context, child) => AppShell(child: child ?? const SizedBox.shrink()),
       home: const AuthGate(),
     );
   }

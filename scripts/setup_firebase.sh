@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Registers the Android app, fetches google-services.json, generates
-# firebase_options.dart, and deploys Auth + Firestore config.
+# Registers Android + Web apps, generates firebase_options.dart, deploys Auth/Firestore/Hosting config.
 set -euo pipefail
 
-PROJECT_ID="${FIREBASE_PROJECT:-599945759594}"
+PROJECT_ID="${FIREBASE_PROJECT:-mymaps-b534f}"
 PACKAGE_NAME="com.lifegoal.app.lifegoal_app"
 APP_DISPLAY_NAME="LifeGoal AI"
+WEB_APP_DISPLAY_NAME="LifeGoal AI Web"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$ROOT_DIR"
@@ -44,6 +44,28 @@ mkdir -p android/app
 npx -y firebase-tools@latest apps:sdkconfig ANDROID "$APP_ID" --project "$PROJECT_ID" \
   > android/app/google-services.json
 
+echo "==> Listing existing Web apps..."
+WEB_APP_ID="$(npx -y firebase-tools@latest apps:list WEB --project "$PROJECT_ID" 2>/dev/null \
+  | awk '/1:[0-9]+:web:/{ print $1; exit }' || true)"
+
+if [[ -z "$WEB_APP_ID" ]]; then
+  echo "==> Registering Web app..."
+  WEB_CREATE_OUTPUT="$(npx -y firebase-tools@latest apps:create WEB "$WEB_APP_DISPLAY_NAME" \
+    --project "$PROJECT_ID")"
+  echo "$WEB_CREATE_OUTPUT"
+  WEB_APP_ID="$(echo "$WEB_CREATE_OUTPUT" | grep -oE '1:[0-9]+:web:[a-f0-9]+' | head -1)"
+fi
+
+if [[ -z "$WEB_APP_ID" ]]; then
+  echo "Could not find or create a Web app. Check Firebase Console."
+  exit 1
+fi
+
+echo "==> Downloading web/firebase_web_config.json..."
+mkdir -p web
+npx -y firebase-tools@latest apps:sdkconfig WEB "$WEB_APP_ID" --project "$PROJECT_ID" \
+  > web/firebase_web_config.json
+
 echo "==> Generating lib/firebase_options.dart..."
 dart run tool/generate_firebase_options.dart
 
@@ -58,4 +80,7 @@ echo "==> For Google Sign-In on Android, add your debug SHA-1 fingerprint:"
 keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android 2>/dev/null \
   | grep -E 'SHA1|SHA-1' || echo "    (Run keytool manually if debug keystore is missing)"
 echo ""
-echo "Done. Run: flutter pub get && flutter run"
+echo "Done."
+echo "  Mobile: flutter run"
+echo "  Web (local): flutter run -d chrome"
+echo "  Web (deploy): bash scripts/deploy_web.sh"

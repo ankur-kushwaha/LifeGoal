@@ -1,15 +1,22 @@
 import 'dart:convert';
 import 'dart:io';
 
-/// Generates lib/firebase_options.dart from android/app/google-services.json.
+/// Generates lib/firebase_options.dart from android/app/google-services.json
+/// and web/firebase_web_config.json.
 void main() {
-  final jsonFile = File('android/app/google-services.json');
-  if (!jsonFile.existsSync()) {
+  final androidJsonFile = File('android/app/google-services.json');
+  if (!androidJsonFile.existsSync()) {
     stderr.writeln('Missing android/app/google-services.json — run scripts/setup_firebase.sh first.');
     exit(1);
   }
 
-  final root = jsonDecode(jsonFile.readAsStringSync()) as Map<String, dynamic>;
+  final webJsonFile = File('web/firebase_web_config.json');
+  if (!webJsonFile.existsSync()) {
+    stderr.writeln('Missing web/firebase_web_config.json — run scripts/setup_firebase.sh to register the web app.');
+    exit(1);
+  }
+
+  final root = jsonDecode(androidJsonFile.readAsStringSync()) as Map<String, dynamic>;
   final projectInfo = root['project_info'] as Map<String, dynamic>;
   final clients = root['client'] as List<dynamic>;
 
@@ -36,6 +43,13 @@ void main() {
   final androidAppId = clientInfo['mobilesdk_app_id'] as String;
   final androidApiKey = (apiKeys.first as Map<String, dynamic>)['current_key'] as String;
 
+  final webConfig = jsonDecode(webJsonFile.readAsStringSync()) as Map<String, dynamic>;
+  final webApiKey = webConfig['apiKey'] as String;
+  final webAppId = webConfig['appId'] as String;
+  final webAuthDomain = webConfig['authDomain'] as String? ?? '$projectId.firebaseapp.com';
+  final webStorageBucket = webConfig['storageBucket'] as String? ?? storageBucket;
+  final webMessagingSenderId = webConfig['messagingSenderId'] as String? ?? projectNumber;
+
   String? webClientId;
   for (final oauth in oauthClients) {
     final map = oauth as Map<String, dynamic>;
@@ -45,12 +59,9 @@ void main() {
     }
   }
 
-  final webApiKey = androidApiKey;
-  final webAppId = androidAppId;
-
   final buffer = StringBuffer()
-    ..writeln("// GENERATED FILE — do not edit by hand.")
-    ..writeln("// Run: dart run tool/generate_firebase_options.dart")
+    ..writeln("// GENERATED from Firebase config — do not edit by hand.")
+    ..writeln("// Re-run: dart run tool/generate_firebase_options.dart")
     ..writeln("import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;")
     ..writeln("import 'package:flutter/foundation.dart'")
     ..writeln("    show defaultTargetPlatform, kIsWeb, TargetPlatform;")
@@ -75,10 +86,10 @@ void main() {
     ..writeln('  static const FirebaseOptions web = FirebaseOptions(')
     ..writeln("    apiKey: '$webApiKey',")
     ..writeln("    appId: '$webAppId',")
-    ..writeln("    messagingSenderId: '$projectNumber',")
+    ..writeln("    messagingSenderId: '$webMessagingSenderId',")
     ..writeln("    projectId: '$projectId',")
-    ..writeln("    authDomain: '$projectId.firebaseapp.com',")
-    ..writeln("    storageBucket: '$storageBucket',")
+    ..writeln("    authDomain: '$webAuthDomain',")
+    ..writeln("    storageBucket: '$webStorageBucket',")
     ..writeln('  );')
     ..writeln('')
     ..writeln('  static const FirebaseOptions android = FirebaseOptions(')
@@ -108,5 +119,5 @@ void main() {
     ..writeln('}');
 
   File('lib/firebase_options.dart').writeAsStringSync(buffer.toString());
-  stdout.writeln('Wrote lib/firebase_options.dart (project: $projectId)');
+  stdout.writeln('Wrote lib/firebase_options.dart (project: $projectId, web app: $webAppId)');
 }

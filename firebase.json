@@ -9,7 +9,9 @@
       }
     },
     "authorizedDomains": [
-      "localhost"
+      "localhost",
+      "mymaps-b534f.web.app",
+      "mymaps-b534f.firebaseapp.com"
     ]
   },
   "firestore": {
@@ -17,5 +19,39 @@
     "indexes": "firestore.indexes.json",
     "database": "lifegoal",
     "location": "asia-south1"
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(js|wasm|css|png|jpg|jpeg|gif|webp|svg|ico|woff|woff2|ttf|otf)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
+    ]
   }
 }

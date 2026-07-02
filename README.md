@@ -213,3 +213,37 @@ For each new version:
 ```bash
 flutter run -d chrome
 ```
+
+---
+
+## Deploy Web App (Firebase Hosting)
+
+The Flutter app is the web UI and runs on the **same Firebase project** (`mymaps-b534f`) as Auth and Firestore.
+
+### First-time setup
+
+1. Register Android + Web apps and generate config:
+   ```bash
+   bash scripts/setup_firebase.sh
+   ```
+2. Deploy Auth so hosting domains work for sign-in:
+   ```bash
+   npx -y firebase-tools@latest deploy --only auth --project mymaps-b534f
+   ```
+
+### Build and deploy
+
+```bash
+bash scripts/deploy_web.sh
+```
+
+Live URLs after deploy:
+- https://mymaps-b534f.web.app
+- https://mymaps-b534f.firebaseapp.com
+
+### Preview locally
+
+```bash
+flutter build web --release
+npx -y firebase-tools@latest emulators:start --only hosting
+```
