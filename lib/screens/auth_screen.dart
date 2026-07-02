@@ -12,29 +12,23 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
+class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _otpController = TextEditingController();
 
   bool _isSignUp = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
-  String? _phoneVerificationId;
-  bool _otpSent = false;
 
-  late TabController _tabController;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -50,9 +44,6 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _phoneController.dispose();
-    _otpController.dispose();
-    _tabController.dispose();
     _animationController.dispose();
     super.dispose();
   }
@@ -116,62 +107,6 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
     await _runAuth(() => provider.signInWithGoogle());
   }
 
-  Future<void> _sendPhoneCode() async {
-    final phone = _phoneController.text.trim();
-    if (phone.isEmpty || !phone.startsWith('+')) {
-      setState(() {
-        _errorMessage = 'Enter phone with country code (e.g. +919876543210).';
-      });
-      return;
-    }
-
-    final provider = Provider.of<GoalProvider>(context, listen: false);
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    await provider.sendPhoneVerificationCode(
-      phone,
-      onCodeSent: (verificationId) {
-        if (!mounted) return;
-        setState(() {
-          _phoneVerificationId = verificationId;
-          _otpSent = true;
-          _isLoading = false;
-        });
-      },
-      onError: (message) {
-        if (!mounted) return;
-        setState(() {
-          _errorMessage = message;
-          _isLoading = false;
-        });
-      },
-    );
-  }
-
-  Future<void> _verifyPhoneCode() async {
-    final verificationId = _phoneVerificationId;
-    if (verificationId == null) {
-      setState(() {
-        _errorMessage = 'Request a verification code first.';
-      });
-      return;
-    }
-    if (_otpController.text.trim().length < 4) {
-      setState(() {
-        _errorMessage = 'Enter the SMS verification code.';
-      });
-      return;
-    }
-
-    final provider = Provider.of<GoalProvider>(context, listen: false);
-    await _runAuth(
-      () => provider.signInWithPhoneCode(verificationId, _otpController.text.trim()),
-    );
-  }
-
   Widget _buildErrorBanner() {
     if (_errorMessage == null) return const SizedBox.shrink();
     return Padding(
@@ -181,178 +116,6 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
         style: const TextStyle(color: Colors.redAccent, fontSize: 13),
         textAlign: TextAlign.center,
       ),
-    );
-  }
-
-  Widget _buildEmailForm(ThemeData theme) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            _isSignUp ? 'Create Account' : 'Welcome Back',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 20),
-          TextFormField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.next,
-            style: const TextStyle(color: Colors.black87),
-            decoration: _inputDecoration('Email Address', Icons.email_outlined),
-            validator: (value) {
-              if (value == null || value.isEmpty || !value.contains('@')) {
-                return 'Please enter a valid email address';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _passwordController,
-            obscureText: _obscurePassword,
-            textInputAction: _isSignUp ? TextInputAction.next : TextInputAction.done,
-            onFieldSubmitted: (_) => _isSignUp ? null : _submitEmail(),
-            style: const TextStyle(color: Colors.black87),
-            decoration: _inputDecoration('Password', Icons.lock_outline).copyWith(
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                  color: Colors.black38,
-                ),
-                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-              ),
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty || value.length < 6) {
-                return 'Password must be at least 6 characters';
-              }
-              return null;
-            },
-          ),
-          if (_isSignUp) ...[
-            const SizedBox(height: 16),
-            FadeTransition(
-              opacity: _fadeAnimation,
-              child: TextFormField(
-                controller: _confirmPasswordController,
-                obscureText: _obscurePassword,
-                textInputAction: TextInputAction.done,
-                onFieldSubmitted: (_) => _submitEmail(),
-                style: const TextStyle(color: Colors.black87),
-                decoration: _inputDecoration('Confirm Password', Icons.lock_outline),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please confirm your password';
-                  }
-                  if (value != _passwordController.text) {
-                    return 'Passwords do not match';
-                  }
-                  return null;
-                },
-              ),
-            ),
-          ],
-          const SizedBox(height: 24),
-          _buildErrorBanner(),
-          _isLoading
-              ? const Center(child: CircularProgressIndicator(color: kMoneyGreen))
-              : ElevatedButton(
-                  style: _primaryButtonStyle(),
-                  onPressed: _submitEmail,
-                  child: Text(
-                    _isSignUp ? 'Create Account' : 'Sign In',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-          const SizedBox(height: 16),
-          TextButton(
-            onPressed: _isLoading ? null : _toggleAuthMode,
-            child: Text(
-              _isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up",
-              style: const TextStyle(color: kMoneyGreen, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPhoneForm(ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Phone Sign In',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Include country code (e.g. +91 for India)',
-          style: theme.textTheme.bodySmall?.copyWith(color: Colors.black45),
-        ),
-        const SizedBox(height: 20),
-        TextFormField(
-          controller: _phoneController,
-          keyboardType: TextInputType.phone,
-          enabled: !_otpSent,
-          style: const TextStyle(color: Colors.black87),
-          decoration: _inputDecoration('Phone Number', Icons.phone_outlined),
-        ),
-        if (_otpSent) ...[
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _otpController,
-            keyboardType: TextInputType.number,
-            textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => _verifyPhoneCode(),
-            style: const TextStyle(color: Colors.black87),
-            decoration: _inputDecoration('SMS Code', Icons.sms_outlined),
-          ),
-        ],
-        const SizedBox(height: 24),
-        _buildErrorBanner(),
-        if (_isLoading)
-          const Center(child: CircularProgressIndicator(color: kMoneyGreen))
-        else if (!_otpSent)
-          ElevatedButton(
-            style: _primaryButtonStyle(),
-            onPressed: _sendPhoneCode,
-            child: const Text(
-              'Send Verification Code',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          )
-        else ...[
-          ElevatedButton(
-            style: _primaryButtonStyle(),
-            onPressed: _verifyPhoneCode,
-            child: const Text(
-              'Verify & Sign In',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: () => setState(() {
-              _otpSent = false;
-              _phoneVerificationId = null;
-              _otpController.clear();
-            }),
-            child: const Text(
-              'Change phone number',
-              style: TextStyle(color: kMoneyGreen, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ],
     );
   }
 
@@ -408,10 +171,10 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
+              const Center(
                 child: Hero(
                   tag: 'logo',
-                  child: const AppLogo(size: 80),
+                  child: AppLogo(size: 80),
                 ),
               ),
               const SizedBox(height: 16),
@@ -426,7 +189,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
               ),
               const SizedBox(height: 8),
               Text(
-                'Sign in to sync your goals across devices',
+                'Sign in to sync goals with your family',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: Colors.black45,
@@ -441,41 +204,113 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    children: [
-                      TabBar(
-                        controller: _tabController,
-                        labelColor: kMoneyGreen,
-                        unselectedLabelColor: Colors.black45,
-                        indicatorColor: kMoneyGreen,
-                        tabs: const [
-                          Tab(text: 'Email'),
-                          Tab(text: 'Phone'),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      AnimatedBuilder(
-                        animation: _tabController,
-                        builder: (context, _) {
-                          return _tabController.index == 0
-                              ? _buildEmailForm(theme)
-                              : _buildPhoneForm(theme);
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        children: [
-                          Expanded(child: Divider(color: Colors.grey.shade300)),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 12),
-                            child: Text('or', style: TextStyle(color: Colors.black38)),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          _isSignUp ? 'Create Account' : 'Welcome Back',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
                           ),
-                          Expanded(child: Divider(color: Colors.grey.shade300)),
+                        ),
+                        const SizedBox(height: 20),
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          style: const TextStyle(color: Colors.black87),
+                          decoration: _inputDecoration('Email Address', Icons.email_outlined),
+                          validator: (value) {
+                            if (value == null || value.isEmpty || !value.contains('@')) {
+                              return 'Please enter a valid email address';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          textInputAction: _isSignUp ? TextInputAction.next : TextInputAction.done,
+                          onFieldSubmitted: (_) => _isSignUp ? null : _submitEmail(),
+                          style: const TextStyle(color: Colors.black87),
+                          decoration: _inputDecoration('Password', Icons.lock_outline).copyWith(
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                color: Colors.black38,
+                              ),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty || value.length < 6) {
+                              return 'Password must be at least 6 characters';
+                            }
+                            return null;
+                          },
+                        ),
+                        if (_isSignUp) ...[
+                          const SizedBox(height: 16),
+                          FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: TextFormField(
+                              controller: _confirmPasswordController,
+                              obscureText: _obscurePassword,
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _submitEmail(),
+                              style: const TextStyle(color: Colors.black87),
+                              decoration: _inputDecoration('Confirm Password', Icons.lock_outline),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please confirm your password';
+                                }
+                                if (value != _passwordController.text) {
+                                  return 'Passwords do not match';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
                         ],
-                      ),
-                      const SizedBox(height: 16),
-                      _buildGoogleButton(),
-                    ],
+                        const SizedBox(height: 24),
+                        _buildErrorBanner(),
+                        _isLoading
+                            ? const Center(child: CircularProgressIndicator(color: kMoneyGreen))
+                            : ElevatedButton(
+                                style: _primaryButtonStyle(),
+                                onPressed: _submitEmail,
+                                child: Text(
+                                  _isSignUp ? 'Create Account' : 'Sign In',
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: _isLoading ? null : _toggleAuthMode,
+                          child: Text(
+                            _isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up",
+                            style: const TextStyle(color: kMoneyGreen, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('or', style: TextStyle(color: Colors.black38)),
+                            ),
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _buildGoogleButton(),
+                      ],
+                    ),
                   ),
                 ),
               ),

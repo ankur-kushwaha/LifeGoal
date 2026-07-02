@@ -1,31 +1,5 @@
 rules_version = '2';
 
-// ===============================================================
-// Assumed Data Model
-// ===============================================================
-//
-// Collection: users
-// Document ID: Firebase Auth uid
-// Fields (all optional, merged on write):
-//   - globalInflation: number
-//   - globalReturn: number
-//   - today: string (ISO 8601 date)
-//
-// Subcollection: users/{userId}/goals
-// Document ID: goal id
-// Fields:
-//   - id: string (required)
-//   - name: string (required, max 200)
-//   - account: string (required, max 100)
-//   - targetCost: number (required, >= 0)
-//   - startDate: string (required, ISO 8601)
-//   - targetDate: string (required, ISO 8601)
-//   - currentSavings: number (required, >= 0)
-//   - expectedReturn: number (optional)
-//   - inflationRate: number (optional)
-//
-// ===============================================================
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -35,6 +9,20 @@ service cloud.firestore {
 
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function userFamilyId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId;
+    }
+
+    function isFamilyMember(familyId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/families/$(familyId)/members/$(request.auth.uid));
+    }
+
+    function isFamilyAdmin(familyId) {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/families/$(familyId)).data.adminId == request.auth.uid;
     }
 
     function isValidOptionalNumber(field) {
@@ -63,24 +51,74 @@ service cloud.firestore {
         ]);
     }
 
-    function isValidUserSettings(data) {
-      return data.keys().hasOnly(['globalInflation', 'globalReturn', 'today']) &&
-        (!('globalInflation' in data) || data.globalInflation is number) &&
+    function isValidFamilySettings(data) {
+      return (!('globalInflation' in data) || data.globalInflation is number) &&
         (!('globalReturn' in data) || data.globalReturn is number) &&
         (!('today' in data) || (data.today is string && data.today.size() <= 40));
     }
 
+    function isValidUserProfile(data) {
+      return data.keys().hasOnly(['familyId', 'email', 'displayName', 'globalInflation', 'globalReturn', 'today']) &&
+        (!('familyId' in data) || data.familyId is string) &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 200)) &&
+        (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+        isValidFamilySettings(data);
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidUserSettings(request.resource.data);
+      allow create, update: if isOwner(userId) && isValidUserProfile(request.resource.data);
       allow delete: if isOwner(userId);
 
       match /goals/{goalId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidGoal(request.resource.data);
-        allow update: if isOwner(userId) && isValidGoal(request.resource.data);
-        allow delete: if isOwner(userId);
+        allow read, write: if isOwner(userId);
       }
+    }
+
+    match /families/{familyId} {
+      allow read: if isFamilyMember(familyId);
+      allow create: if isAuthenticated() &&
+        request.resource.data.keys().hasAll(['name', 'adminId', 'createdAt']) &&
+        request.resource.data.adminId == request.auth.uid;
+      allow update: if (
+          (isFamilyAdmin(familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])) ||
+          (isFamilyMember(familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['globalInflation', 'globalReturn', 'today']))
+        ) && isValidFamilySettings(request.resource.data);
+      allow delete: if isFamilyAdmin(familyId);
+
+      match /members/{memberId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isAuthenticated() && (
+          (memberId == request.auth.uid && request.resource.data.role in ['admin', 'member']) ||
+          isFamilyAdmin(familyId)
+        );
+        allow update: if isFamilyAdmin(familyId);
+        allow delete: if isFamilyAdmin(familyId) &&
+          memberId != get(/databases/$(database)/documents/families/$(familyId)).data.adminId;
+      }
+
+      match /goals/{goalId} {
+        allow read: if isFamilyMember(familyId);
+        allow create, update: if isFamilyMember(familyId) && isValidGoal(request.resource.data);
+        allow delete: if isFamilyMember(familyId);
+      }
+
+      match /invites/{inviteId} {
+        allow read: if isFamilyAdmin(familyId);
+        allow create, update: if isFamilyAdmin(familyId);
+        allow delete: if isFamilyAdmin(familyId);
+      }
+    }
+
+    match /invites/{email} {
+      allow read: if isAuthenticated() &&
+        request.auth.token.email != null &&
+        request.auth.token.email.lower() == email;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() &&
+        request.auth.token.email != null &&
+        request.auth.token.email.lower() == email;
+      allow delete: if false;
     }
   }
 }

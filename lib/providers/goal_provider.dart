@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../models/family_model.dart';
 import '../models/goal_model.dart';
 import '../services/auth_service.dart';
+import '../services/family_service.dart';
 import '../services/storage_service.dart';
 import '../firebase_options.dart';
 
@@ -12,18 +14,23 @@ class GoalProvider extends ChangeNotifier {
   DateTime _today = DateTime(2026, 7, 1);
   bool _isLoading = true;
 
-  // Database mode and Service instances
   bool _isFirebaseMode = false;
   late BaseAuthService _authService;
   late BaseStorageService _storageService;
+  late BaseFamilyService _familyService;
   String? _currentUserId;
+  String? _currentFamilyId;
+  FamilyInfo? _family;
+  List<FamilyMember> _familyMembers = [];
+  List<FamilyInvite> _pendingInvites = [];
 
-  // Stream Subscriptions
   StreamSubscription<String?>? _authSubscription;
   StreamSubscription<List<GoalModel>>? _goalsSubscription;
   StreamSubscription<Map<String, dynamic>>? _settingsSubscription;
+  StreamSubscription<FamilyInfo?>? _familySubscription;
+  StreamSubscription<List<FamilyMember>>? _membersSubscription;
+  StreamSubscription<List<FamilyInvite>>? _invitesSubscription;
 
-  // Getters
   List<GoalModel> get goals => _goals;
   double get globalInflation => _globalInflation;
   double get globalReturn => _globalReturn;
@@ -31,18 +38,33 @@ class GoalProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isFirebaseMode => _isFirebaseMode;
   String? get currentUserId => _currentUserId;
+  String? get currentFamilyId => _currentFamilyId;
   bool get isAuthenticated => _currentUserId != null;
+  FamilyInfo? get family => _family;
+  List<FamilyMember> get familyMembers => _familyMembers;
+  List<FamilyInvite> get pendingInvites => _pendingInvites;
 
   BaseAuthService get authService => _authService;
   BaseStorageService get storageService => _storageService;
 
+  FamilyMember? get currentMember {
+    if (_currentUserId == null) return null;
+    for (final member in _familyMembers) {
+      if (member.userId == _currentUserId) return member;
+    }
+    return null;
+  }
+
+  bool get isFamilyAdmin => currentMember?.isAdmin ?? false;
+
   List<String> get accounts {
-    final list = _goals.map((g) => g.account.trim()).where((a) => a.isNotEmpty).toSet().toList();
+    final memberLabels = _familyMembers.map((m) => m.label).toSet();
+    final goalAccounts = _goals.map((g) => g.account.trim()).where((a) => a.isNotEmpty);
+    final list = {...memberLabels, ...goalAccounts}.toList();
     list.sort();
     return list;
   }
 
-  // Financial Calculations
   double get totalWealthInvested {
     return _goals.fold(0.0, (sum, g) => sum + g.currentSavings);
   }
@@ -58,7 +80,7 @@ class GoalProvider extends ChangeNotifier {
   double get overallProgressPercentage {
     double totalTarget = _goals.fold(0.0, (sum, g) => sum + g.getInflationAdjustedTarget(_globalInflation));
     if (totalTarget == 0) return 0.0;
-    
+
     double totalProjected = _goals.fold(0.0, (sum, g) => sum + g.getProjectedSavings(_today, _globalReturn));
     double pct = (totalProjected / totalTarget) * 100;
     return pct > 100 ? 100 : pct;
@@ -78,9 +100,11 @@ class GoalProvider extends ChangeNotifier {
     _authSubscription?.cancel();
     _goalsSubscription?.cancel();
     _settingsSubscription?.cancel();
+    _familySubscription?.cancel();
+    _membersSubscription?.cancel();
+    _invitesSubscription?.cancel();
   }
 
-  // Determine active database mode and initialize corresponding services
   Future<void> _initializeServices() async {
     _isLoading = true;
     notifyListeners();
@@ -93,12 +117,13 @@ class GoalProvider extends ChangeNotifier {
     if (_isFirebaseMode) {
       _authService = FirebaseAuthService();
       _storageService = FirestoreStorageService();
+      _familyService = FirestoreFamilyService();
     } else {
       _authService = LocalMockAuthService();
       _storageService = SharedPreferencesStorageService();
+      _familyService = LocalFamilyService();
     }
 
-    // Listen to Auth State Changes
     _authSubscription = _authService.onAuthStateChanged.listen((userId) {
       _handleAuthStateChange(userId);
     });
@@ -107,25 +132,57 @@ class GoalProvider extends ChangeNotifier {
   Future<void> _handleAuthStateChange(String? userId) async {
     _goalsSubscription?.cancel();
     _settingsSubscription?.cancel();
+    _familySubscription?.cancel();
+    _membersSubscription?.cancel();
+    _invitesSubscription?.cancel();
 
     if (userId != null) {
       _currentUserId = userId;
-      
-      // Auto-migrate data if first-time user
-      await _migrateLocalDataToCloud(userId);
+      _isLoading = true;
+      notifyListeners();
 
-      // Listen to goals and settings
-      _goalsSubscription = _storageService.streamGoals(userId).listen((goalsList) {
+      final email = _authService.currentUserEmail ?? '';
+      await _familyService.ensureMembership(
+        userId: userId,
+        email: email,
+        displayName: _authService.currentUserDisplayName,
+      );
+
+      _currentFamilyId = await _familyService.getUserFamilyId(userId);
+      if (_currentFamilyId == null) {
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      await _migrateLocalDataToCloud(_currentFamilyId!);
+
+      _familySubscription = _familyService.streamFamily(_currentFamilyId!).listen((family) {
+        _family = family;
+        notifyListeners();
+      });
+
+      _membersSubscription = _familyService.streamMembers(_currentFamilyId!).listen((members) {
+        _familyMembers = members;
+        notifyListeners();
+      });
+
+      _invitesSubscription = _familyService.streamPendingInvites(_currentFamilyId!).listen((invites) {
+        _pendingInvites = invites;
+        notifyListeners();
+      });
+
+      _goalsSubscription = _storageService.streamGoals(_currentFamilyId!).listen((goalsList) {
         _goals = goalsList;
         _isLoading = false;
         notifyListeners();
       }, onError: (e) {
-        debugPrint("Error listening to goals: $e");
+        debugPrint('Error listening to goals: $e');
         _isLoading = false;
         notifyListeners();
       });
 
-      _settingsSubscription = _storageService.streamSettings(userId).listen((settingsMap) {
+      _settingsSubscription = _storageService.streamSettings(_currentFamilyId!).listen((settingsMap) {
         if (settingsMap.containsKey('globalInflation')) {
           _globalInflation = (settingsMap['globalInflation'] as num).toDouble();
         }
@@ -137,51 +194,52 @@ class GoalProvider extends ChangeNotifier {
         }
         notifyListeners();
       }, onError: (e) {
-        debugPrint("Error listening to settings: $e");
+        debugPrint('Error listening to settings: $e');
       });
     } else {
       _currentUserId = null;
+      _currentFamilyId = null;
+      _family = null;
+      _familyMembers = [];
+      _pendingInvites = [];
       _goals = [];
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // Automatic Cloud Migration
-  Future<void> _migrateLocalDataToCloud(String userId) async {
+  Future<void> _migrateLocalDataToCloud(String familyId) async {
     try {
-      // Fetch goals already present in the current active storage
-      final cloudGoals = await _storageService.getGoalsOnce(userId);
-      if (cloudGoals.isNotEmpty) {
-        return; // Cloud already populated, skip migration
-      }
+      final cloudGoals = await _storageService.getGoalsOnce(familyId);
+      if (cloudGoals.isNotEmpty) return;
 
-      // Fetch goals from local SharedPreferencesStorageService
       final localStore = SharedPreferencesStorageService();
-      final localGoals = await localStore.getGoalsOnce(userId);
-
-      if (localGoals.isEmpty) {
-        return;
+      final localGoals = await localStore.getGoalsOnce(familyId);
+      if (localGoals.isEmpty && _currentUserId != null) {
+        final legacyGoals = await localStore.getGoalsOnce(_currentUserId!);
+        if (legacyGoals.isNotEmpty) {
+          for (final goal in legacyGoals) {
+            await _storageService.saveGoal(familyId, goal);
+          }
+        }
+      } else if (localGoals.isNotEmpty) {
+        for (final goal in localGoals) {
+          await _storageService.saveGoal(familyId, goal);
+        }
       }
 
-      debugPrint('Migrating ${localGoals.length} local goals to cloud...');
-      for (final goal in localGoals) {
-        await _storageService.saveGoal(userId, goal);
-      }
-
-      final localSettings = await localStore.streamSettings(userId).first.timeout(
+      final localSettings = await localStore.streamSettings(familyId).first.timeout(
         const Duration(milliseconds: 500),
         onTimeout: () => <String, dynamic>{},
       );
       if (localSettings.isNotEmpty) {
-        await _storageService.saveSettings(userId, localSettings);
+        await _storageService.saveSettings(familyId, localSettings);
       }
     } catch (e) {
-      debugPrint("Migration failed: $e");
+      debugPrint('Migration failed: $e');
     }
   }
 
-  // Auth Operations
   Future<void> signUp(String email, String password) async {
     await _authService.signUp(email, password);
   }
@@ -194,31 +252,48 @@ class GoalProvider extends ChangeNotifier {
     await _authService.signInWithGoogle();
   }
 
-  Future<void> sendPhoneVerificationCode(
-    String phoneNumber, {
-    required void Function(String verificationId) onCodeSent,
-    required void Function(String message) onError,
-    int? forceResendingToken,
-  }) async {
-    await _authService.sendPhoneVerificationCode(
-      phoneNumber,
-      onCodeSent: onCodeSent,
-      onError: onError,
-      forceResendingToken: forceResendingToken,
-    );
-  }
-
-  Future<void> signInWithPhoneCode(String verificationId, String smsCode) async {
-    await _authService.signInWithPhoneCode(verificationId, smsCode);
-  }
-
   Future<void> signOut() async {
     await _authService.signOut();
   }
 
-  // Settings operations — writes sync to cloud immediately.
+  Future<void> inviteFamilyMember(String email) async {
+    if (_currentFamilyId == null || _currentUserId == null) {
+      throw Exception('You must be signed in to invite members.');
+    }
+    if (!isFamilyAdmin) {
+      throw Exception('Only the family admin can invite members.');
+    }
+    await _familyService.inviteMember(
+      familyId: _currentFamilyId!,
+      invitedBy: _currentUserId!,
+      email: email,
+    );
+  }
+
+  Future<void> removeFamilyMember(String memberId) async {
+    if (_currentFamilyId == null || _currentUserId == null) {
+      throw Exception('You must be signed in to remove members.');
+    }
+    await _familyService.removeMember(
+      familyId: _currentFamilyId!,
+      memberId: memberId,
+      adminId: _currentUserId!,
+    );
+  }
+
+  Future<void> updateFamilyName(String name) async {
+    if (_currentFamilyId == null || _currentUserId == null) {
+      throw Exception('You must be signed in to update the family.');
+    }
+    await _familyService.updateFamilyName(
+      familyId: _currentFamilyId!,
+      name: name,
+      adminId: _currentUserId!,
+    );
+  }
+
   Future<void> updateSettings({double? inflation, double? rateOfReturn, DateTime? referenceToday}) async {
-    if (_currentUserId == null) return;
+    if (_currentFamilyId == null) return;
 
     if (inflation != null) _globalInflation = inflation;
     if (rateOfReturn != null) _globalReturn = rateOfReturn;
@@ -230,29 +305,28 @@ class GoalProvider extends ChangeNotifier {
       'today': _today.toIso8601String(),
     };
 
-    await _storageService.saveSettings(_currentUserId!, settings);
+    await _storageService.saveSettings(_currentFamilyId!, settings);
     notifyListeners();
   }
 
-  // CRUD — each change is saved to Firestore and reflected via live streams.
   Future<void> addGoal(GoalModel goal) async {
-    if (_currentUserId == null) return;
-    await _storageService.saveGoal(_currentUserId!, goal);
+    if (_currentFamilyId == null) return;
+    await _storageService.saveGoal(_currentFamilyId!, goal);
   }
 
   Future<void> updateGoal(GoalModel updatedGoal) async {
-    if (_currentUserId == null) return;
-    await _storageService.saveGoal(_currentUserId!, updatedGoal);
+    if (_currentFamilyId == null) return;
+    await _storageService.saveGoal(_currentFamilyId!, updatedGoal);
   }
 
   Future<void> deleteGoal(String id) async {
-    if (_currentUserId == null) return;
-    await _storageService.deleteGoal(_currentUserId!, id);
+    if (_currentFamilyId == null) return;
+    await _storageService.deleteGoal(_currentFamilyId!, id);
   }
 
   Future<void> refreshFromCloud() async {
-    if (_currentUserId == null) return;
-    final goals = await _storageService.getGoalsOnce(_currentUserId!);
+    if (_currentFamilyId == null) return;
+    final goals = await _storageService.getGoalsOnce(_currentFamilyId!);
     _goals = goals;
     notifyListeners();
   }

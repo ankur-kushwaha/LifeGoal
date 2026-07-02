@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/goal_model.dart';
 import '../providers/goal_provider.dart';
 import '../widgets/app_logo.dart';
+import 'family_screen.dart';
 import 'goal_detail_screen.dart';
 import 'goal_form_screen.dart';
 
@@ -87,7 +88,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.account_circle, color: kMoneyGreen),
             onSelected: (value) async {
-              if (value == 'logout') {
+              if (value == 'family') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const FamilyScreen()),
+                );
+              } else if (value == 'logout') {
                 await provider.signOut();
               }
             },
@@ -95,19 +101,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
               PopupMenuItem<String>(
                 enabled: false,
                 child: Text(
-                  provider.isFirebaseMode ? 'Auto-synced to cloud' : 'Offline mode',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54),
+                  provider.family?.name ?? 'My Family',
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
                 ),
               ),
-              if (provider.currentUserId != null)
-                PopupMenuItem<String>(
-                  enabled: false,
-                  child: Text(
-                    'ID: ${provider.currentUserId}',
-                    style: const TextStyle(fontSize: 11, color: Colors.black38),
+              PopupMenuItem<String>(
+                enabled: false,
+                child: Text(
+                  provider.isFirebaseMode ? 'Auto-synced to cloud' : 'Offline mode',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ),
+              if (provider.isAuthenticated) ...[
+                const PopupMenuDivider(),
+                const PopupMenuItem<String>(
+                  value: 'family',
+                  child: Row(
+                    children: [
+                      Icon(Icons.family_restroom, color: kMoneyGreen, size: 20),
+                      SizedBox(width: 8),
+                      Text('Manage Family'),
+                    ],
                   ),
                 ),
-              if (provider.isAuthenticated) ...[
                 const PopupMenuDivider(),
                 const PopupMenuItem<String>(
                   value: 'logout',

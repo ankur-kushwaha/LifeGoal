@@ -7,16 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 abstract class BaseAuthService {
   Stream<String?> get onAuthStateChanged;
   String? get currentUserUid;
+  String? get currentUserEmail;
+  String? get currentUserDisplayName;
   Future<String?> signUp(String email, String password);
   Future<String?> signIn(String email, String password);
   Future<String?> signInWithGoogle();
-  Future<void> sendPhoneVerificationCode(
-    String phoneNumber, {
-    required void Function(String verificationId) onCodeSent,
-    required void Function(String message) onError,
-    int? forceResendingToken,
-  });
-  Future<String?> signInWithPhoneCode(String verificationId, String smsCode);
   Future<void> signOut();
 }
 
@@ -37,10 +32,6 @@ String authErrorMessage(Object error) {
         return 'Password must be at least 6 characters.';
       case 'too-many-requests':
         return 'Too many attempts. Please try again later.';
-      case 'invalid-verification-code':
-        return 'Invalid verification code.';
-      case 'invalid-phone-number':
-        return 'Invalid phone number. Include country code (e.g. +91).';
       case 'account-exists-with-different-credential':
         return 'An account already exists with a different sign-in method.';
       case 'operation-not-allowed':
@@ -62,6 +53,12 @@ class FirebaseAuthService implements BaseAuthService {
 
   @override
   String? get currentUserUid => _firebaseAuth.currentUser?.uid;
+
+  @override
+  String? get currentUserEmail => _firebaseAuth.currentUser?.email;
+
+  @override
+  String? get currentUserDisplayName => _firebaseAuth.currentUser?.displayName;
 
   @override
   Future<String?> signUp(String email, String password) async {
@@ -102,43 +99,6 @@ class FirebaseAuthService implements BaseAuthService {
   }
 
   @override
-  Future<void> sendPhoneVerificationCode(
-    String phoneNumber, {
-    required void Function(String verificationId) onCodeSent,
-    required void Function(String message) onError,
-    int? forceResendingToken,
-  }) async {
-    await _firebaseAuth.verifyPhoneNumber(
-      phoneNumber: phoneNumber.trim(),
-      forceResendingToken: forceResendingToken,
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        try {
-          await _firebaseAuth.signInWithCredential(credential);
-        } catch (e) {
-          onError(authErrorMessage(e));
-        }
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        onError(authErrorMessage(e));
-      },
-      codeSent: (verificationId, resendToken) {
-        onCodeSent(verificationId);
-      },
-      codeAutoRetrievalTimeout: (_) {},
-    );
-  }
-
-  @override
-  Future<String?> signInWithPhoneCode(String verificationId, String smsCode) async {
-    final credential = PhoneAuthProvider.credential(
-      verificationId: verificationId,
-      smsCode: smsCode.trim(),
-    );
-    final userCredential = await _firebaseAuth.signInWithCredential(credential);
-    return userCredential.user?.uid;
-  }
-
-  @override
   Future<void> signOut() async {
     if (!kIsWeb) {
       await _googleSignIn.signOut();
@@ -150,6 +110,8 @@ class FirebaseAuthService implements BaseAuthService {
 class LocalMockAuthService implements BaseAuthService {
   final _controller = StreamController<String?>.broadcast();
   String? _currentUid;
+  String? _currentEmail;
+  String? _currentDisplayName;
 
   LocalMockAuthService() {
     _loadState();
@@ -159,6 +121,8 @@ class LocalMockAuthService implements BaseAuthService {
     try {
       final prefs = await SharedPreferences.getInstance();
       _currentUid = prefs.getString('local_auth_uid');
+      _currentEmail = prefs.getString('local_auth_email');
+      _currentDisplayName = prefs.getString('local_auth_display_name');
       _controller.add(_currentUid);
     } catch (_) {
       _controller.add(null);
@@ -175,11 +139,20 @@ class LocalMockAuthService implements BaseAuthService {
   String? get currentUserUid => _currentUid;
 
   @override
+  String? get currentUserEmail => _currentEmail;
+
+  @override
+  String? get currentUserDisplayName => _currentDisplayName;
+
+  @override
   Future<String?> signUp(String email, String password) async {
     final prefs = await SharedPreferences.getInstance();
     final uid = _uidFromEmail(email);
+    final normalizedEmail = email.trim().toLowerCase();
     await prefs.setString('local_auth_uid', uid);
+    await prefs.setString('local_auth_email', normalizedEmail);
     _currentUid = uid;
+    _currentEmail = normalizedEmail;
     _controller.add(uid);
     return uid;
   }
@@ -188,8 +161,11 @@ class LocalMockAuthService implements BaseAuthService {
   Future<String?> signIn(String email, String password) async {
     final prefs = await SharedPreferences.getInstance();
     final uid = _uidFromEmail(email);
+    final normalizedEmail = email.trim().toLowerCase();
     await prefs.setString('local_auth_uid', uid);
+    await prefs.setString('local_auth_email', normalizedEmail);
     _currentUid = uid;
+    _currentEmail = normalizedEmail;
     _controller.add(uid);
     return uid;
   }
@@ -198,31 +174,13 @@ class LocalMockAuthService implements BaseAuthService {
   Future<String?> signInWithGoogle() async {
     final prefs = await SharedPreferences.getInstance();
     const uid = 'local_google_user';
+    const email = 'user@gmail.com';
     await prefs.setString('local_auth_uid', uid);
+    await prefs.setString('local_auth_email', email);
+    await prefs.setString('local_auth_display_name', 'Google User');
     _currentUid = uid;
-    _controller.add(uid);
-    return uid;
-  }
-
-  @override
-  Future<void> sendPhoneVerificationCode(
-    String phoneNumber, {
-    required void Function(String verificationId) onCodeSent,
-    required void Function(String message) onError,
-    int? forceResendingToken,
-  }) async {
-    onCodeSent('mock_verification_id');
-  }
-
-  @override
-  Future<String?> signInWithPhoneCode(String verificationId, String smsCode) async {
-    if (smsCode.length < 4) {
-      throw Exception('Invalid verification code.');
-    }
-    final prefs = await SharedPreferences.getInstance();
-    const uid = 'local_phone_user';
-    await prefs.setString('local_auth_uid', uid);
-    _currentUid = uid;
+    _currentEmail = email;
+    _currentDisplayName = 'Google User';
     _controller.add(uid);
     return uid;
   }
@@ -231,7 +189,11 @@ class LocalMockAuthService implements BaseAuthService {
   Future<void> signOut() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('local_auth_uid');
+    await prefs.remove('local_auth_email');
+    await prefs.remove('local_auth_display_name');
     _currentUid = null;
+    _currentEmail = null;
+    _currentDisplayName = null;
     _controller.add(null);
   }
 }

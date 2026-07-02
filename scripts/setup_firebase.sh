@@ -54,10 +54,6 @@ echo "==> Deploying Firestore rules and indexes..."
 npx -y firebase-tools@latest deploy --only firestore --project "$PROJECT_ID"
 
 echo ""
-echo "==> Manual step: enable Phone Authentication"
-echo "    Firebase Console -> Authentication -> Sign-in method -> Phone -> Enable"
-echo "    https://console.firebase.google.com/project/$PROJECT_ID/authentication/providers"
-echo ""
 echo "==> For Google Sign-In on Android, add your debug SHA-1 fingerprint:"
 keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android 2>/dev/null \
   | grep -E 'SHA1|SHA-1' || echo "    (Run keytool manually if debug keystore is missing)"
