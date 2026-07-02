@@ -1,5 +1,7 @@
+import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lifegoal_app/models/goal_model.dart';
+import 'package:lifegoal_app/data/spreadsheet_goals.dart';
 
 void main() {
   group('Financial Calculations Tests', () {
@@ -48,6 +50,40 @@ void main() {
       // PMT(14%/12, 26, 0, -1966930) = 65,194
       final requiredSip = dreamHome.getRequiredSIP(today, globalInflation, globalReturn);
       expect(requiredSip.round(), 65194);
+
+      // 7. SIP from today (offset 0) matches getRequiredSIP
+      final sipFromToday = dreamHome.getRequiredSIPAfterMonths(
+        today,
+        globalInflation,
+        globalReturn,
+        0,
+      );
+      expect(sipFromToday.round(), requiredSip.round());
+    });
+
+    test('Bali vacation SIP at today considers projected savings growth', () {
+      final bali = GoalModel(
+        id: 'bali',
+        name: 'Bali Vacation',
+        account: 'Ankur',
+        targetCost: 200000.0,
+        startDate: DateTime(2024, 1, 1),
+        targetDate: DateTime(2029, 6, 30),
+        currentSavings: 150000.0,
+      );
+
+      final sipToday = bali.getRequiredSIP(today, globalInflation, globalReturn);
+      final sipTimelineToday =
+          bali.getRequiredSIPAfterMonths(today, globalInflation, globalReturn, 0);
+
+      expect(sipTimelineToday.round(), sipToday.round());
+      // Should be well below naive target minus current savings SIP (~₹1,960)
+      final naiveGap = bali.getInflationAdjustedTarget(globalInflation) -
+          bali.currentSavings;
+      final naiveSip = naiveGap *
+          (globalReturn / 100 / 12) /
+          (pow(1 + globalReturn / 100 / 12, bali.getRemainingMonths(today)) - 1);
+      expect(sipToday, lessThan(naiveSip * 0.8));
     });
 
     test('Shree ki shadi Calculations Match Spreadsheet', () {
@@ -80,6 +116,11 @@ void main() {
       // Required SIP should be 0 since target is fully covered by projected growth
       final requiredSip = shadi.getRequiredSIP(today, globalInflation, globalReturn);
       expect(requiredSip, 0.0);
+    });
+
+    test('Spreadsheet goals list matches workbook', () {
+      expect(SpreadsheetGoals.all.length, 7);
+      expect(SpreadsheetGoals.all.map((g) => g.name), contains('DreamHome'));
     });
 
     test('Date Difference Edge Cases', () {

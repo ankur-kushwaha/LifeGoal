@@ -63,9 +63,9 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     final g = widget.goal;
     final provider = Provider.of<GoalProvider>(context, listen: false);
     final defaultAccount = provider.currentMember?.label ??
-        (provider.accounts.isNotEmpty ? provider.accounts.first : 'Me');
+        (provider.familyMemberLabels.isNotEmpty ? provider.familyMemberLabels.first : 'Me');
     _name = g?.name ?? '';
-    _account = g?.account ?? defaultAccount;
+    _account = provider.resolveMemberLabel(g?.account ?? defaultAccount);
     _targetCost = g?.targetCost ?? 0.0;
     _startDate = g?.startDate ?? provider.today;
     _targetDate = g?.targetDate ?? provider.today.add(const Duration(days: 365 * 3));
@@ -457,7 +457,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'TODAY\'S VALUE',
+                  'Original Goal',
                   style: TextStyle(color: Colors.black38, fontSize: 9, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 2),
@@ -569,32 +569,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              Autocomplete<String>(
-                initialValue: TextEditingValue(text: _account),
-                optionsBuilder: (TextEditingValue textEditingValue) {
-                  final provider = Provider.of<GoalProvider>(context, listen: false);
-                  final suggestions = provider.accounts;
-                  if (textEditingValue.text.isEmpty) return suggestions;
-                  return suggestions.where((String option) {
-                    return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                  });
-                },
-                onSelected: (String selection) {
-                  setState(() {
-                    _account = selection;
-                  });
-                },
-                fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
-                  return TextFormField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    style: const TextStyle(color: Colors.black87),
-                    decoration: _inputDecoration('Family Member / Account Name', hint: 'Ankur, Neha, etc.'),
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter an account owner name' : null,
-                    onSaved: (val) => _account = val!.trim(),
-                  );
-                },
-              ),
+              _buildMemberField(provider),
               const SizedBox(height: 24),
 
               const Text(
@@ -786,6 +761,45 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildMemberField(GoalProvider provider) {
+    final labels = provider.familyMemberLabels;
+    if (labels.isEmpty) {
+      return TextFormField(
+        initialValue: _account,
+        style: const TextStyle(color: Colors.black87),
+        decoration: _inputDecoration('Family Member', hint: 'Ankur, Neha, etc.'),
+        validator: (val) => val == null || val.trim().isEmpty ? 'Select a family member' : null,
+        onSaved: (val) => _account = val!.trim(),
+      );
+    }
+
+    final selected = labels.contains(_account) ? _account : provider.resolveMemberLabel(_account);
+    final value = labels.contains(selected) ? selected : labels.first;
+
+    return DropdownButtonFormField<String>(
+      key: ValueKey('member_$value'),
+      initialValue: value,
+      style: const TextStyle(color: Colors.black87),
+      dropdownColor: kCardBg,
+      decoration: _inputDecoration('Family Member'),
+      items: labels
+          .map(
+            (label) => DropdownMenuItem(
+              value: label,
+              child: Text(label),
+            ),
+          )
+          .toList(),
+      onChanged: (selection) {
+        if (selection != null) {
+          setState(() => _account = selection);
+        }
+      },
+      onSaved: (selection) => _account = selection ?? value,
+      validator: (val) => val == null || val.isEmpty ? 'Select a family member' : null,
     );
   }
 

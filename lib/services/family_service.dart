@@ -117,7 +117,7 @@ class FirestoreFamilyService implements BaseFamilyService {
         familyId: familyId,
         role: FamilyRole.member,
       );
-      await inviteRef.set({'status': 'accepted'}, SetOptions(merge: true));
+      await _markInviteAccepted(familyId: familyId, email: normalizedEmail);
       await _migratePersonalGoalsToFamily(userId, familyId);
       return;
     }
@@ -245,6 +245,25 @@ class FirestoreFamilyService implements BaseFamilyService {
       {'name': name.trim()},
       SetOptions(merge: true),
     );
+  }
+
+  Future<void> _markInviteAccepted({
+    required String familyId,
+    required String email,
+  }) async {
+    final normalizedEmail = normalizeEmail(email);
+    final batch = _firestore.batch();
+    batch.set(
+      _firestore.collection('invites').doc(normalizedEmail),
+      {'status': 'accepted'},
+      SetOptions(merge: true),
+    );
+    batch.set(
+      _firestore.collection('families').doc(familyId).collection('invites').doc(normalizedEmail),
+      {'status': 'accepted'},
+      SetOptions(merge: true),
+    );
+    await batch.commit();
   }
 
   Future<void> _joinFamily({
@@ -382,6 +401,9 @@ class LocalFamilyService implements BaseFamilyService {
       familyId = invite['familyId'] as String;
       role = FamilyRole.member;
       await prefs.remove(inviteKey);
+      final invites = await _loadInvites(familyId);
+      invites.removeWhere((i) => normalizeEmail(i.email) == normalizedEmail);
+      await _saveInvites(familyId, invites);
     } else {
       familyId = 'local_family_$userId';
       role = FamilyRole.admin;

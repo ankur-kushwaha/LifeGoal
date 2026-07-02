@@ -5,11 +5,15 @@ import 'package:provider/provider.dart';
 import '../models/goal_model.dart';
 import '../providers/goal_provider.dart';
 import '../widgets/app_logo.dart';
+import '../widgets/multipoint_progress_bar.dart';
 import '../widgets/pwa_install_banner.dart';
+import '../data/spreadsheet_goals.dart';
 import 'family_screen.dart';
 import 'goal_detail_screen.dart';
 import 'goal_form_screen.dart';
 import 'privacy_policy_screen.dart';
+
+enum _SipFilter { all, needsSip, fullyFunded }
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -20,6 +24,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   String _selectedAccount = 'All';
+  _SipFilter _sipFilter = _SipFilter.all;
   bool _isSettingsExpanded = false;
 
   final NumberFormat _currencyFormatter = NumberFormat.currency(
@@ -33,13 +38,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final provider = Provider.of<GoalProvider>(context);
     final theme = Theme.of(context);
 
-    // Filter goals based on active family tab
-    final filteredGoals = _selectedAccount == 'All'
-        ? provider.goals
-        : provider.goals.where((g) => g.account.trim().toLowerCase() == _selectedAccount.toLowerCase()).toList();
+    // Filter goals by family member and SIP status
+    final filteredGoals = _filterGoals(provider);
 
     // Dynamically fetch account list
-    final familyMembers = ['All', ...provider.accounts];
+    final familyMembers = ['All', ...provider.familyMemberLabels];
 
     return Scaffold(
       backgroundColor: kScaffoldBg, // Premium Dark Slate
@@ -63,15 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ],
-            ),
-            Text(
-              provider.isFirebaseMode ? 'Auto-synced to cloud' : 'Offline mode',
-              style: TextStyle(
-                fontSize: 10,
-                color: provider.isFirebaseMode ? kMoneyGreen : Colors.amber[800],
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            )
           ],
         ),
         actions: [
@@ -114,10 +109,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               PopupMenuItem<String>(
                 enabled: false,
-                child: Text(
-                  provider.isFirebaseMode ? 'Auto-synced to cloud' : 'Offline mode',
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
-                ),
+                child: const SizedBox.shrink(),
               ),
               if (provider.isAuthenticated) ...[
                 const PopupMenuDivider(),
@@ -184,6 +176,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // Family Filter Tab Bar
                   _buildFamilyTabBar(familyMembers),
 
+                  // SIP Filter
+                  _buildSipFilterBar(),
+
                   // Goal Cards Title & Stats
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
@@ -246,6 +241,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Widget: Empty State UI
   Widget _buildEmptyState(BuildContext context) {
+    final provider = Provider.of<GoalProvider>(context, listen: false);
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
@@ -265,9 +261,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Tap the button below to add your first financial life goal.',
+            'Tap the button below to add your first financial life goal, or load the spreadsheet goals.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+          ),
+          const SizedBox(height: 20),
+          OutlinedButton.icon(
+            onPressed: () => _importSpreadsheetGoals(context, provider),
+            icon: const Icon(Icons.table_chart_outlined, color: kMoneyGreen),
+            label: Text(
+              'Load spreadsheet goals (${SpreadsheetGoals.all.length})',
+              style: const TextStyle(color: kMoneyGreen, fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: kMoneyGreen),
+            ),
           ),
         ],
       ),
@@ -341,41 +349,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
               provider.updateSettings(rateOfReturn: val);
             },
           ),
-          const SizedBox(height: 8),
-          // Reference Date editor
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Reference "Today" Date:',
-                    style: TextStyle(color: Colors.black54, fontSize: 13),
-                  ),
-                  Text(
-                    DateFormat('dd-MMM-yyyy').format(provider.today),
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                ],
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _pickReferenceDate(context, provider),
-                icon: const Icon(Icons.calendar_month, color: kMoneyGreen, size: 16),
-                label: const Text('Change Date', style: TextStyle(color: kMoneyGreen)),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: kMoneyGreen),
-                ),
-              )
-            ],
-          ),
         ],
       ),
     );
+  }
+
+  Future<void> _importSpreadsheetGoals(BuildContext context, GoalProvider provider) async {
+    final replace = provider.goals.isNotEmpty;
+    final confirmed = !replace ||
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: kCardBg,
+            title: const Text('Update spreadsheet goals?', style: TextStyle(color: Colors.black87)),
+            content: Text(
+              'This will update the ${SpreadsheetGoals.all.length} spreadsheet goals if they already exist, or add any that are missing.',
+              style: const TextStyle(color: Colors.black54),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Update', style: TextStyle(color: kMoneyGreen)),
+              ),
+            ],
+          ),
+        ) ==
+            true;
+
+    if (!confirmed || !context.mounted) return;
+
+    try {
+      final count = await provider.importSpreadsheetGoals();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Loaded $count spreadsheet goals.')),
+      );
+      setState(() => _selectedAccount = 'All');
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load goals: $e')),
+      );
+    }
   }
 
   // Widget: Pick reference date dialog
@@ -443,7 +462,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'MONTHLY INSTALLMENT FOR TODAY',
+                            "Monthly SIP Amount for Today",
                             style: TextStyle(
                               color: Colors.black54,
                               fontSize: 10,
@@ -542,6 +561,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  bool _goalNeedsSip(GoalModel goal, GoalProvider provider) {
+    return goal.getRequiredSIP(
+          provider.today,
+          provider.globalInflation,
+          provider.globalReturn,
+        ) >
+        0;
+  }
+
+  List<GoalModel> _filterGoals(GoalProvider provider) {
+    var goals = provider.goalsForMember(_selectedAccount);
+
+    switch (_sipFilter) {
+      case _SipFilter.needsSip:
+        return goals.where((g) => _goalNeedsSip(g, provider)).toList();
+      case _SipFilter.fullyFunded:
+        return goals.where((g) => !_goalNeedsSip(g, provider)).toList();
+      case _SipFilter.all:
+        return goals;
+    }
+  }
+
   // Widget: Family Tab Filter
   Widget _buildFamilyTabBar(List<String> accounts) {
     return Container(
@@ -584,17 +625,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildSipFilterBar() {
+    const filters = <(_SipFilter, String)>[
+      (_SipFilter.all, 'All'),
+      (_SipFilter.needsSip, 'Needs SIP'),
+      (_SipFilter.fullyFunded, 'Fully Funded'),
+    ];
+
+    return Container(
+      height: 44,
+      margin: const EdgeInsets.only(bottom: 4),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: filters.length,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemBuilder: (context, index) {
+          final (filter, label) = filters[index];
+          final isSelected = _sipFilter == filter;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ChoiceChip(
+              label: Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              selected: isSelected,
+              selectedColor: kMoneyGreen,
+              backgroundColor: kCardBg,
+              side: BorderSide(
+                color: isSelected ? kMoneyGreen : Colors.black.withOpacity(0.06),
+              ),
+              onSelected: (selected) {
+                if (selected) {
+                  setState(() => _sipFilter = filter);
+                }
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   // Widget: Goal Card list item
   Widget _buildGoalCard(BuildContext context, GoalModel goal, GoalProvider provider) {
-    final double target = goal.getInflationAdjustedTarget(provider.globalInflation);
+    final double inflationTarget = goal.getInflationAdjustedTarget(provider.globalInflation);
+    final double projectedSavings = goal.getProjectedSavings(provider.today, provider.globalReturn);
     final double reqSip = goal.getRequiredSIP(provider.today, provider.globalInflation, provider.globalReturn);
     final int remainingMonths = goal.getRemainingMonths(provider.today);
     final health = goal.getHealth(provider.today, provider.globalInflation, provider.globalReturn);
-
-    // Calculate actual current progress (not projected)
-    final double progress = target > 0 
-        ? (goal.currentSavings / target * 100.0).clamp(0.0, 100.0)
-        : 100.0;
 
     Color healthColor;
     String healthText;
@@ -822,62 +904,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Row 2: Progress indicator
-                Row(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: progress / 100.0,
-                          minHeight: 4,
-                          backgroundColor: Colors.black12,
-                          valueColor: AlwaysStoppedAnimation<Color>(healthColor),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      '${progress.toStringAsFixed(0)}%',
-                      style: TextStyle(
-                        color: healthColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // Row 3: Progress text label (X saved of Y target)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${_currencyFormatter.format(goal.currentSavings)} saved of ${_currencyFormatter.format(target)}',
-                      style: const TextStyle(
-                        color: Colors.black54,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                // Row 2: Multipoint progress bar
+                MultipointProgressBar(
+                  actualTarget: goal.targetCost,
+                  inflationAdjustedTarget: inflationTarget,
+                  currentSavings: goal.currentSavings,
+                  projectedSavings: projectedSavings,
+                  returnRatePct: goal.expectedReturn ?? provider.globalReturn,
+                  targetDateLabel: DateFormat('dd MMM yyyy').format(goal.targetDate),
+                  fillColor: healthColor,
+                  formatCurrency: _currencyFormatter.format,
                 ),
                 const SizedBox(height: 10),
                 Divider(color: Colors.black.withOpacity(0.04), height: 1),
                 const SizedBox(height: 10),
 
-                // Row 4: Footer (Original budget + Update action)
+                // Row 3: Footer (Update action)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Text(
-                      'Original Budget: ${_currencyFormatter.format(goal.targetCost)}',
-                      style: const TextStyle(
-                        color: Colors.black38,
-                        fontSize: 10,
-                      ),
-                    ),
                     InkWell(
                       onTap: () => _showQuickUpdateSavingsDialog(context, goal, provider),
                       borderRadius: BorderRadius.circular(4),

@@ -17,6 +17,19 @@ class FamilyMember {
 
   String get label => displayName?.trim().isNotEmpty == true ? displayName!.trim() : _nameFromEmail(email);
 
+  bool matchesAccount(String account) {
+    final value = account.trim().toLowerCase();
+    if (value.isEmpty) return false;
+    if (label.toLowerCase() == value) return true;
+    final name = displayName?.trim();
+    if (name != null && name.isNotEmpty && name.toLowerCase() == value) return true;
+    final emailLocal = email.split('@').first.toLowerCase();
+    if (emailLocal == value) return true;
+    final firstName = label.split(RegExp(r'\s+')).first.toLowerCase();
+    if (firstName == value) return true;
+    return false;
+  }
+
   factory FamilyMember.fromJson(String userId, Map<String, dynamic> json) {
     return FamilyMember(
       userId: userId,

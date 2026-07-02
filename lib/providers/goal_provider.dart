@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/family_service.dart';
 import '../services/storage_service.dart';
 import '../firebase_options.dart';
+import '../data/spreadsheet_goals.dart';
 
 class GoalProvider extends ChangeNotifier {
   List<GoalModel> _goals = [];
@@ -57,12 +58,38 @@ class GoalProvider extends ChangeNotifier {
 
   bool get isFamilyAdmin => currentMember?.isAdmin ?? false;
 
-  List<String> get accounts {
-    final memberLabels = _familyMembers.map((m) => m.label).toSet();
-    final goalAccounts = _goals.map((g) => g.account.trim()).where((a) => a.isNotEmpty);
-    final list = {...memberLabels, ...goalAccounts}.toList();
-    list.sort();
+  List<GoalModel> goalsForMember(String memberLabel) {
+    if (memberLabel == 'All') return _goals;
+
+    FamilyMember? member;
+    for (final m in _familyMembers) {
+      if (m.label.toLowerCase() == memberLabel.toLowerCase()) {
+        member = m;
+        break;
+      }
+    }
+
+    if (member != null) {
+      return _goals.where((g) => member!.matchesAccount(g.account)).toList();
+    }
+
+    return _goals
+        .where((g) => g.account.trim().toLowerCase() == memberLabel.toLowerCase())
+        .toList();
+  }
+
+  List<String> get familyMemberLabels {
+    final list = _familyMembers.map((m) => m.label).toList()..sort();
     return list;
+  }
+
+  List<String> get accounts => familyMemberLabels;
+
+  String resolveMemberLabel(String account) {
+    for (final member in _familyMembers) {
+      if (member.matchesAccount(account)) return member.label;
+    }
+    return account;
   }
 
   double get totalWealthInvested {
@@ -171,11 +198,12 @@ class GoalProvider extends ChangeNotifier {
 
       _membersSubscription = _familyService.streamMembers(_currentFamilyId!).listen((members) {
         _familyMembers = members;
+        _pendingInvites = _pendingInvitesForMembers(_pendingInvites, members);
         notifyListeners();
       });
 
       _invitesSubscription = _familyService.streamPendingInvites(_currentFamilyId!).listen((invites) {
-        _pendingInvites = invites;
+        _pendingInvites = _pendingInvitesForMembers(invites, _familyMembers);
         notifyListeners();
       });
 
@@ -357,5 +385,34 @@ class GoalProvider extends ChangeNotifier {
     final goals = await _storageService.getGoalsOnce(_currentFamilyId!);
     _goals = goals;
     notifyListeners();
+  }
+
+  /// Import or refresh the 7 goals from the planning spreadsheet.
+  Future<int> importSpreadsheetGoals() async {
+    if (_currentFamilyId == null) {
+      throw Exception('Family not ready yet. Please wait a moment and try again.');
+    }
+
+    var imported = 0;
+    for (final goal in SpreadsheetGoals.all) {
+      final exists = _goals.any((g) => g.id == goal.id);
+      if (exists) {
+        await updateGoal(goal);
+      } else {
+        await addGoal(goal);
+      }
+      imported++;
+    }
+    return imported;
+  }
+
+  List<FamilyInvite> _pendingInvitesForMembers(
+    List<FamilyInvite> invites,
+    List<FamilyMember> members,
+  ) {
+    final memberEmails = members.map((m) => normalizeEmail(m.email)).toSet();
+    return invites
+        .where((invite) => !memberEmails.contains(normalizeEmail(invite.email)))
+        .toList();
   }
 }

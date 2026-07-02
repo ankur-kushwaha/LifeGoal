@@ -87,21 +87,42 @@ class GoalModel {
 
   // Calculate Required Monthly SIP
   double getRequiredSIP(DateTime today, double globalInflation, double globalReturn) {
-    final remainingMonths = getRemainingMonths(today);
-    if (remainingMonths <= 0) return 0.0;
+    return getRequiredSIPAfterMonths(
+      today,
+      globalInflation,
+      globalReturn,
+      0,
+    );
+  }
 
-    final needed = getRemainingAmountNeeded(today, globalInflation, globalReturn);
-    if (needed <= 0) return 0.0;
+  // Required monthly SIP if you wait N months (growth only), then start SIP for the rest.
+  double getRequiredSIPAfterMonths(
+    DateTime today,
+    double globalInflation,
+    double globalReturn,
+    int monthsFromToday,
+  ) {
+    final totalRemainingMonths = getRemainingMonths(today);
+    final monthsLeft = totalRemainingMonths - monthsFromToday;
+    if (monthsLeft <= 0) return 0.0;
 
     final annualRate = getEffectiveReturnRate(globalReturn);
-    final r = annualRate / 12.0; // monthly return rate
+    final savingsAtOffset = monthsFromToday <= 0
+        ? currentSavings
+        : getSavingsAfterMonths(today, globalReturn, monthsFromToday);
+    final projectedWithoutSip =
+        savingsAtOffset * pow(1 + annualRate, monthsLeft / 12.0);
 
+    final target = getInflationAdjustedTarget(globalInflation);
+    final needed = target - projectedWithoutSip;
+    if (needed <= 0) return 0.0;
+
+    final r = annualRate / 12.0;
     if (r == 0) {
-      return needed / remainingMonths;
+      return needed / monthsLeft;
     }
 
-    // PMT formula: PMT = FV * r / ((1 + r)^n - 1)
-    return needed * r / (pow(1 + r, remainingMonths) - 1);
+    return needed * r / (pow(1 + r, monthsLeft) - 1);
   }
 
   // Get percentage completed (Grown Savings / Inflation Adjusted Target)

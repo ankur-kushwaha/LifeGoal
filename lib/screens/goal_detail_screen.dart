@@ -67,7 +67,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     }
 
     if (!_timelineInitialized) {
-      _timelineMonths = remainingMonths;
+      _timelineMonths = 0;
       _timelineInitialized = true;
     }
     _timelineMonths = _timelineMonths.clamp(0, remainingMonths);
@@ -211,7 +211,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildMiniMetric('Today\'s Budget', _currencyFormatter.format(targetCost)),
+                      _buildMiniMetric('Original Goal', _currencyFormatter.format(targetCost)),
                       _buildMiniMetric('Inflation-Adj Target', _currencyFormatter.format(inflationTarget)),
                       _buildMiniMetric('Projected Savings', _currencyFormatter.format(projectedSavings)),
                     ],
@@ -225,6 +225,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
               goal: goal,
               today: provider.today,
               globalReturn: provider.globalReturn,
+              globalInflation: provider.globalInflation,
               inflationTarget: inflationTarget,
               remainingMonths: remainingMonths,
               returnRatePct: globalReturnRate * 100,
@@ -459,6 +460,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     required GoalModel goal,
     required DateTime today,
     required double globalReturn,
+    required double globalInflation,
     required double inflationTarget,
     required int remainingMonths,
     required double returnRatePct,
@@ -484,6 +486,15 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         ? (projectedAtMonth / inflationTarget * 100).clamp(0.0, 100.0)
         : 100.0;
     final shortfall = (inflationTarget - projectedAtMonth).clamp(0.0, double.infinity);
+    final sipRequired = _timelineMonths == 0
+        ? goal.getRequiredSIP(today, globalInflation, globalReturn)
+        : goal.getRequiredSIPAfterMonths(
+            today,
+            globalInflation,
+            globalReturn,
+            _timelineMonths,
+          );
+    final monthsLeft = remainingMonths - _timelineMonths;
     final isAtTarget = _timelineMonths >= remainingMonths;
 
     return Column(
@@ -614,6 +625,20 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                   child: Text(
                     'Your current savings are projected to fully fund this goal.',
                     style: TextStyle(color: kMoneyGreen, fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                )
+              else if (monthsLeft > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    sipRequired > 0
+                        ? 'SIP required to fill gap: ${_currencyFormatter.format(sipRequired)} / month for $monthsLeft month${monthsLeft == 1 ? '' : 's'}'
+                        : 'No monthly SIP needed from this point — savings cover the inflated goal.',
+                    style: TextStyle(
+                      color: sipRequired > 0 ? Colors.orangeAccent : kMoneyGreen,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               const SizedBox(height: 16),
