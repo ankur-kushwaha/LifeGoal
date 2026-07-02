@@ -27,6 +27,7 @@ service cloud.firestore {
 
     function isValidOptionalNumber(field) {
       return !(field in request.resource.data) ||
+        request.resource.data[field] == null ||
         request.resource.data[field] is number;
     }
 

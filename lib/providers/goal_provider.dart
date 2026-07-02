@@ -142,11 +142,18 @@ class GoalProvider extends ChangeNotifier {
       notifyListeners();
 
       final email = _authService.currentUserEmail ?? '';
-      await _familyService.ensureMembership(
-        userId: userId,
-        email: email,
-        displayName: _authService.currentUserDisplayName,
-      );
+      try {
+        await _familyService.ensureMembership(
+          userId: userId,
+          email: email,
+          displayName: _authService.currentUserDisplayName,
+        );
+      } catch (e) {
+        debugPrint('Family setup failed: $e');
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
 
       _currentFamilyId = await _familyService.getUserFamilyId(userId);
       if (_currentFamilyId == null) {
@@ -310,13 +317,34 @@ class GoalProvider extends ChangeNotifier {
   }
 
   Future<void> addGoal(GoalModel goal) async {
-    if (_currentFamilyId == null) return;
-    await _storageService.saveGoal(_currentFamilyId!, goal);
+    if (_currentFamilyId == null) {
+      throw Exception('Family not ready yet. Please wait a moment and try again.');
+    }
+    _goals = [..._goals, goal];
+    notifyListeners();
+    try {
+      await _storageService.saveGoal(_currentFamilyId!, goal);
+    } catch (e) {
+      _goals = _goals.where((g) => g.id != goal.id).toList();
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<void> updateGoal(GoalModel updatedGoal) async {
-    if (_currentFamilyId == null) return;
-    await _storageService.saveGoal(_currentFamilyId!, updatedGoal);
+    if (_currentFamilyId == null) {
+      throw Exception('Family not ready yet. Please wait a moment and try again.');
+    }
+    final previous = _goals;
+    _goals = _goals.map((g) => g.id == updatedGoal.id ? updatedGoal : g).toList();
+    notifyListeners();
+    try {
+      await _storageService.saveGoal(_currentFamilyId!, updatedGoal);
+    } catch (e) {
+      _goals = previous;
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<void> deleteGoal(String id) async {

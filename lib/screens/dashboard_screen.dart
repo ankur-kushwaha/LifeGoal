@@ -208,13 +208,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add, fontWeight: FontWeight.bold),
         label: const Text('Add Life Goal', style: TextStyle(fontWeight: FontWeight.bold)),
-        onPressed: () {
-          Navigator.push(
+        onPressed: () async {
+          final createdAccount = await Navigator.push<String>(
             context,
             MaterialPageRoute(
               builder: (context) => const GoalFormScreen(),
             ),
           );
+          if (createdAccount != null && mounted) {
+            setState(() => _selectedAccount = 'All');
+          }
         },
       ),
     );

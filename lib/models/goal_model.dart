@@ -139,8 +139,8 @@ class GoalModel {
       'startDate': startDate.toIso8601String(),
       'targetDate': targetDate.toIso8601String(),
       'currentSavings': currentSavings,
-      'expectedReturn': expectedReturn,
-      'inflationRate': inflationRate,
+      if (expectedReturn != null) 'expectedReturn': expectedReturn,
+      if (inflationRate != null) 'inflationRate': inflationRate,
     };
   }
 

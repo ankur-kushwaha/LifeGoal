@@ -683,33 +683,34 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                     isEditMode ? 'Save Changes' : 'Create Goal',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      _formKey.currentState!.save();
+                  onPressed: () async {
+                    if (!_formKey.currentState!.validate()) return;
+                    _formKey.currentState!.save();
 
-                      final savedTargetCost = _useManualTarget
-                          ? _backCalculateTodayValue(_manualTargetAmount)
-                          : _targetCost;
+                    final savedTargetCost = _useManualTarget
+                        ? _backCalculateTodayValue(_manualTargetAmount)
+                        : _targetCost;
 
-                      final newGoal = GoalModel(
-                        id: widget.goal?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                        name: _name,
-                        account: _account,
-                        targetCost: savedTargetCost,
-                        startDate: _startDate,
-                        targetDate: _targetDate,
-                        currentSavings: _currentSavings,
-                        expectedReturn: widget.goal?.expectedReturn,
-                        inflationRate: _inflationRateToSave(provider.globalInflation),
-                      );
+                    final newGoal = GoalModel(
+                      id: widget.goal?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                      name: _name,
+                      account: _account,
+                      targetCost: savedTargetCost,
+                      startDate: _startDate,
+                      targetDate: _targetDate,
+                      currentSavings: _currentSavings,
+                      expectedReturn: widget.goal?.expectedReturn,
+                      inflationRate: _inflationRateToSave(provider.globalInflation),
+                    );
 
+                    try {
                       if (isEditMode) {
-                        provider.updateGoal(newGoal);
+                        await provider.updateGoal(newGoal);
                       } else {
-                        provider.addGoal(newGoal);
+                        await provider.addGoal(newGoal);
                       }
-
-                      Navigator.pop(context);
+                      if (!context.mounted) return;
+                      Navigator.pop(context, newGoal.account);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
@@ -717,6 +718,14 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                                 ? 'Goal "${newGoal.name}" updated successfully!'
                                 : 'Goal "${newGoal.name}" created successfully!',
                           ),
+                        ),
+                      );
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(e.toString().replaceAll('Exception:', '').trim()),
+                          backgroundColor: Colors.redAccent,
                         ),
                       );
                     }
