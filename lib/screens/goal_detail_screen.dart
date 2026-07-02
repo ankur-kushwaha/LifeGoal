@@ -20,6 +20,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
   double _simulatedInflationOverride = 0.0;
   double _simulatedReturnOverride = 0.0;
   bool _isSimulatorInitialized = false;
+  int _timelineMonths = 0;
+  bool _timelineInitialized = false;
 
   final NumberFormat _currencyFormatter = NumberFormat.currency(
     locale: 'en_IN',
@@ -63,6 +65,12 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
       _simulatedInflationOverride = goal.inflationRate ?? provider.globalInflation;
       _isSimulatorInitialized = true;
     }
+
+    if (!_timelineInitialized) {
+      _timelineMonths = remainingMonths;
+      _timelineInitialized = true;
+    }
+    _timelineMonths = _timelineMonths.clamp(0, remainingMonths);
 
     // Goal Health Styling
     Color healthColor;
@@ -210,6 +218,16 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 24),
+
+            _buildGrowthTimelineCard(
+              goal: goal,
+              today: provider.today,
+              globalReturn: provider.globalReturn,
+              inflationTarget: inflationTarget,
+              remainingMonths: remainingMonths,
+              returnRatePct: globalReturnRate * 100,
             ),
             const SizedBox(height: 24),
 
@@ -434,6 +452,215 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildGrowthTimelineCard({
+    required GoalModel goal,
+    required DateTime today,
+    required double globalReturn,
+    required double inflationTarget,
+    required int remainingMonths,
+    required double returnRatePct,
+  }) {
+    if (remainingMonths <= 0) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: kCardBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.black.withOpacity(0.08)),
+        ),
+        child: const Text(
+          'This goal has reached its target date. No further growth timeline applies.',
+          style: TextStyle(color: Colors.black54, fontSize: 13),
+        ),
+      );
+    }
+
+    final projectedAtMonth = goal.getSavingsAfterMonths(today, globalReturn, _timelineMonths);
+    final timelineDate = GoalModel.dateAfterMonths(today, _timelineMonths);
+    final progressPct = inflationTarget > 0
+        ? (projectedAtMonth / inflationTarget * 100).clamp(0.0, 100.0)
+        : 100.0;
+    final shortfall = (inflationTarget - projectedAtMonth).clamp(0.0, double.infinity);
+    final isAtTarget = _timelineMonths >= remainingMonths;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Growth Timeline',
+          style: TextStyle(color: kMoneyGreen, fontWeight: FontWeight.bold, fontSize: 15),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'See how your current savings grow over time with no additional investments.',
+          style: TextStyle(color: Colors.black38, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: kCardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: kMoneyGreen.withOpacity(0.2)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                spreadRadius: 1,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _timelineMonths == 0 ? 'TODAY' : 'PROJECTED SAVINGS',
+                        style: const TextStyle(
+                          color: Colors.black38,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _currencyFormatter.format(projectedAtMonth),
+                        style: const TextStyle(
+                          color: kMoneyGreen,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text(
+                        'ON DATE',
+                        style: TextStyle(
+                          color: Colors.black38,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        DateFormat('dd MMM yyyy').format(timelineDate),
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progressPct / 100.0,
+                        minHeight: 8,
+                        backgroundColor: Colors.black12,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          progressPct >= 100 ? kMoneyGreen : Colors.orangeAccent,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${progressPct.toStringAsFixed(0)}%',
+                    style: const TextStyle(
+                      color: Colors.black87,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${progressPct.toStringAsFixed(0)}% of inflation-adjusted target (${_currencyFormatter.format(inflationTarget)})',
+                style: const TextStyle(color: Colors.black45, fontSize: 11),
+              ),
+              if (isAtTarget && shortfall > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Shortfall of ${_currencyFormatter.format(shortfall)} even with no further investing.',
+                    style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                  ),
+                )
+              else if (isAtTarget && shortfall == 0)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Your current savings are projected to fully fund this goal.',
+                    style: TextStyle(color: kMoneyGreen, fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Divider(color: Colors.black.withOpacity(0.06)),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _timelineMonths == 0
+                        ? 'Today'
+                        : '${_timelineMonths} mo${_timelineMonths == 1 ? '' : 's'} from now',
+                    style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    '${returnRatePct.toStringAsFixed(1)}% p.a. · no new SIP',
+                    style: const TextStyle(color: Colors.black38, fontSize: 11),
+                  ),
+                ],
+              ),
+              Slider(
+                value: _timelineMonths.toDouble(),
+                min: 0,
+                max: remainingMonths.toDouble(),
+                divisions: remainingMonths > 1 ? remainingMonths : 1,
+                activeColor: kMoneyGreen,
+                inactiveColor: Colors.black12,
+                label: DateFormat('MMM yyyy').format(timelineDate),
+                onChanged: (val) => setState(() => _timelineMonths = val.round()),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    DateFormat('dd MMM yyyy').format(today),
+                    style: const TextStyle(color: Colors.black38, fontSize: 10),
+                  ),
+                  Text(
+                    DateFormat('dd MMM yyyy').format(goal.targetDate),
+                    style: const TextStyle(color: Colors.black38, fontSize: 10),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

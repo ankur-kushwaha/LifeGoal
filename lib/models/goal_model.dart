@@ -62,10 +62,19 @@ class GoalModel {
 
   // Calculate Projected Value of Current Savings at Target Date
   double getProjectedSavings(DateTime today, double globalReturn) {
-    final rate = getEffectiveReturnRate(globalReturn);
     final remainingMonths = getRemainingMonths(today);
-    final years = remainingMonths / 12.0;
-    return currentSavings * pow(1 + rate, years);
+    return getSavingsAfterMonths(today, globalReturn, remainingMonths);
+  }
+
+  // Project current savings with compound growth only (no further SIP).
+  double getSavingsAfterMonths(DateTime today, double globalReturn, int monthsFromToday) {
+    if (monthsFromToday <= 0) return currentSavings;
+    final rate = getEffectiveReturnRate(globalReturn);
+    return currentSavings * pow(1 + rate, monthsFromToday / 12.0);
+  }
+
+  static DateTime dateAfterMonths(DateTime from, int months) {
+    return DateTime(from.year, from.month + months, from.day);
   }
 
   // Calculate Remaining Target Amount to be accumulated

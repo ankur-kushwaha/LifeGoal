@@ -49,6 +49,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   late DateTime _targetDate;
   late double _currentSavings;
   late double _goalInflationRate;
+  late double _goalReturnRate;
   late bool _useManualTarget;
   String? _selectedPresetId;
 
@@ -70,6 +71,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     _targetDate = g?.targetDate ?? provider.today.add(const Duration(days: 365 * 3));
     _currentSavings = g?.currentSavings ?? 0.0;
     _goalInflationRate = g?.inflationRate ?? provider.globalInflation;
+    _goalReturnRate = g?.expectedReturn ?? provider.globalReturn;
     _useManualTarget = false;
 
     final years = GoalModel.monthsBetween(_startDate, _targetDate) / 12.0;
@@ -280,6 +282,44 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     );
   }
 
+  Widget _buildReturnSlider(double globalReturn) {
+    final isCustom = (_goalReturnRate - globalReturn).abs() > 0.05;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Expected return for this goal',
+              style: TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+            Text(
+              '${_goalReturnRate.toStringAsFixed(1)}%',
+              style: const TextStyle(color: kMoneyGreen, fontSize: 13, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        Slider(
+          value: _goalReturnRate,
+          min: 0,
+          max: 30,
+          divisions: 60,
+          activeColor: kMoneyGreen,
+          inactiveColor: Colors.black12,
+          onChanged: (val) => setState(() => _goalReturnRate = val),
+        ),
+        Text(
+          isCustom
+              ? 'Using a custom return for SIP calculations (global default: ${globalReturn.toStringAsFixed(1)}%).'
+              : 'Using the global default return. Slide to override for this goal.',
+          style: const TextStyle(color: Colors.black45, fontSize: 10),
+        ),
+      ],
+    );
+  }
+
   Widget _buildInflationSlider(double globalInflation) {
     final isCustom = (_goalInflationRate - globalInflation).abs() > 0.05;
 
@@ -327,7 +367,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     );
   }
 
-  Widget _buildTargetSummaryCard(double globalInflation) {
+  Widget _buildTargetSummaryCard(double globalInflation, double globalReturn) {
     final inflatedAmount = _useManualTarget ? _manualTargetAmount : _inflatedTargetAmount();
     final todayValue = _useManualTarget ? _backCalculateTodayValue(_manualTargetAmount) : _targetCost;
     final hasValidInput = inflatedAmount > 0 && _years > 0;
@@ -387,9 +427,11 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
               inflatedAmount: inflatedAmount,
               inflationRate: _goalInflationRate,
             ),
-            const SizedBox(height: 16),
-            _buildInflationSlider(globalInflation),
           ],
+          const SizedBox(height: 16),
+          _buildInflationSlider(globalInflation),
+          const SizedBox(height: 16),
+          _buildReturnSlider(globalReturn),
         ],
       ),
     );
@@ -465,6 +507,13 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
         ],
       ),
     );
+  }
+
+  double? _expectedReturnToSave(double globalReturn) {
+    if ((_goalReturnRate - globalReturn).abs() < 0.05) {
+      return null;
+    }
+    return _goalReturnRate;
   }
 
   double? _inflationRateToSave(double globalInflation) {
@@ -667,7 +716,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                 ],
               ),
 
-              _buildTargetSummaryCard(provider.globalInflation),
+              _buildTargetSummaryCard(provider.globalInflation, provider.globalReturn),
               const SizedBox(height: 24),
 
               SizedBox(
@@ -699,7 +748,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                       startDate: _startDate,
                       targetDate: _targetDate,
                       currentSavings: _currentSavings,
-                      expectedReturn: widget.goal?.expectedReturn,
+                      expectedReturn: _expectedReturnToSave(provider.globalReturn),
                       inflationRate: _inflationRateToSave(provider.globalInflation),
                     );
 
