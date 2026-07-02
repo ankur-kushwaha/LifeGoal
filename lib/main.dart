@@ -1,15 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'app_routes.dart';
 import 'constants.dart';
 import 'firebase_options.dart';
 import 'providers/goal_provider.dart';
 import 'widgets/app_shell.dart';
-import 'screens/dashboard_screen.dart';
-import 'screens/auth_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (kIsWeb) {
+    usePathUrlStrategy();
+  }
   
   try {
     if (DefaultFirebaseOptions.isConfigured) {
@@ -60,31 +64,8 @@ class MyApp extends StatelessWidget {
         ),
       ),
       builder: (context, child) => AppShell(child: child ?? const SizedBox.shrink()),
-      home: const AuthGate(),
+      initialRoute: AppRoutes.resolveInitialRoute(),
+      onGenerateRoute: AppRoutes.onGenerateRoute,
     );
-  }
-}
-
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final provider = Provider.of<GoalProvider>(context);
-
-    if (provider.isLoading) {
-      return const Scaffold(
-        backgroundColor: kScaffoldBg,
-        body: Center(
-          child: CircularProgressIndicator(color: kMoneyGreen),
-        ),
-      );
-    }
-
-    if (provider.isAuthenticated) {
-      return const DashboardScreen();
-    }
-
-    return const AuthScreen();
   }
 }

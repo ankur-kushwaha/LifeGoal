@@ -11,7 +11,7 @@ import '../data/spreadsheet_goals.dart';
 import 'family_screen.dart';
 import 'goal_detail_screen.dart';
 import 'goal_form_screen.dart';
-import 'privacy_policy_screen.dart';
+import '../app_routes.dart';
 
 enum _SipFilter { all, needsSip, fullyFunded }
 
@@ -91,10 +91,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   MaterialPageRoute(builder: (context) => const FamilyScreen()),
                 );
               } else if (value == 'privacy') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()),
-                );
+                Navigator.pushNamed(context, AppRoutes.privacy);
               } else if (value == 'logout') {
                 await provider.signOut();
               }

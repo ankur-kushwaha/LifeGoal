@@ -119,7 +119,7 @@ Google Play requires a signed **Android App Bundle (AAB)**, not an APK, for new 
 3. Complete the developer profile (name, contact email, etc.).
 
 ### 2. Configure release signing
-Follow the **Release signing** steps above. Your `android/key.properties` should point to `upload-keystore.jks` in the project root.
+Follow the **Release signing** steps above. Your `android/key.properties` should point to `upload-keystore.jks` in the project root (`storeFile=../../upload-keystore.jks` — paths are relative to `android/app/`).
 
 For Play App Signing, Google will manage the app signing key. Upload your **upload key** (the keystore you generated) when prompted during your first release.
 
@@ -262,7 +262,7 @@ After changing `web/sw.js`, bump `CACHE_NAME` inside that file before redeployin
 Use this URL in Google Play Console and other store listings:
 
 ```
-https://mymaps-b534f.web.app/privacy.html
+https://mymaps-b534f.web.app/privacy
 ```
 
 The policy is also available in-app from the account menu and sign-in screen.

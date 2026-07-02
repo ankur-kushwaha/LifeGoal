@@ -4,4 +4,4 @@
 storePassword=your-store-password
 keyPassword=your-key-password
 keyAlias=upload
-storeFile=../upload-keystore.jks
+storeFile=../../upload-keystore.jks
