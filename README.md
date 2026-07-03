@@ -178,7 +178,49 @@ Also complete required policy sections under **Policy and programs**:
 - **App content** — privacy policy URL, ads declaration, content rating questionnaire, target audience, data safety form
 - **Privacy policy** — required because the app uses Firebase Authentication
 
-### 7. Upload and roll out
+### 7. Fastlane setup (automated upload)
+
+One-time setup so you can build and upload from the terminal (similar to Expo `eas submit`):
+
+1. **Create a Google Play service account**
+   - Play Console → **Setup → API access** → link a Google Cloud project (or create one).
+   - Create a service account and download its JSON key.
+   - In Play Console, grant that account **Release manager** (or admin) for your app.
+
+2. **Save the key locally** (never commit it):
+   ```bash
+   cp android/fastlane/play-store-key.json.example android/fastlane/play-store-key.json
+   # paste your real JSON key into play-store-key.json
+   ```
+
+3. **Install Fastlane dependencies** (first time only):
+   ```bash
+   cd android && bundle install
+   ```
+
+4. **Publish from the project root**:
+   ```bash
+   chmod +x scripts/release_android.sh   # once
+   ./scripts/release_android.sh
+   ```
+
+   Options:
+   ```bash
+   TRACK=beta ./scripts/release_android.sh       # internal (default), alpha, beta, production
+   BUILD_ONLY=1 ./scripts/release_android.sh     # build AAB only
+   SKIP_BUILD=1 ./scripts/release_android.sh     # upload existing AAB
+   ```
+
+   Or run lanes directly from `android/`:
+   ```bash
+   bundle exec fastlane android release          # build + upload (internal track)
+   bundle exec fastlane android upload track:production
+   ```
+
+Bump `version` in `pubspec.yaml` before each upload. The build number (`+N`) must increase every time.
+
+### 8. Upload and roll out (manual alternative)
+If you prefer the Play Console UI:
 1. Open **Release → Testing → Internal testing** (or **Production** when ready).
 2. Click **Create new release**.
 3. Upload `app-release.aab`.
@@ -190,7 +232,7 @@ Recommended rollout path:
 2. **Closed / Open testing** — broader beta feedback
 3. **Production** — public release (staged rollout recommended)
 
-### 8. Pre-launch checklist
+### 9. Pre-launch checklist
 - [ ] `flutter test` passes
 - [ ] Release bundle built with production signing (`key.properties` configured)
 - [ ] Version code incremented in `pubspec.yaml`
@@ -203,9 +245,8 @@ Recommended rollout path:
 ### Updating an existing Play Store release
 For each new version:
 1. Increment `version` in `pubspec.yaml` (bump the build number at minimum).
-2. Run `flutter build appbundle --release`.
-3. Upload the new `.aab` to the desired track in Play Console.
-4. Submit for review and roll out.
+2. Run `./scripts/release_android.sh` (or `flutter build appbundle --release` + manual upload).
+3. Submit for review and roll out in Play Console if needed.
 
 ---
 

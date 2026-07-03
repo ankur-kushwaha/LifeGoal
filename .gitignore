@@ -49,6 +49,13 @@ app.*.map.json
 **/*.jks
 **/*.keystore
 
+# Fastlane / Play Store API key
+/android/fastlane/play-store-key.json
+/android/fastlane/report.xml
+/android/fastlane/Preview.html
+/android/fastlane/screenshots
+/android/fastlane/test_output
+
 # Cloud Functions secrets
 functions/.env
 functions/.secret.local

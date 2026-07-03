@@ -1,0 +1,47 @@
+# Fastlane lanes for LifeGoal Android releases.
+# Run from android/: bundle exec fastlane android <lane>
+# Or from project root: ./scripts/release_android.sh
+
+default_platform(:android)
+
+AAB_PATH = File.expand_path("../../build/app/outputs/bundle/release/app-release.aab", __dir__)
+
+def flutter_root
+  File.expand_path("../..", __dir__)
+end
+
+platform :android do
+  desc "Build signed release AAB with Flutter"
+  lane :build do
+    UI.message("Building release app bundle from #{flutter_root}")
+    sh("cd #{flutter_root.shellescape} && flutter pub get")
+    sh("cd #{flutter_root.shellescape} && flutter build appbundle --release")
+    UI.user_error!("AAB not found at #{AAB_PATH}") unless File.exist?(AAB_PATH)
+    UI.success("Built #{AAB_PATH}")
+  end
+
+  desc "Upload existing AAB to Play Store (track: internal|alpha|beta|production)"
+  lane :upload do |options|
+    track = (options[:track] || ENV["TRACK"] || "internal").to_s
+    release_status = (options[:release_status] || ENV["RELEASE_STATUS"] || "completed").to_s
+
+    UI.user_error!("AAB not found at #{AAB_PATH}. Run build first.") unless File.exist?(AAB_PATH)
+
+    upload_to_play_store(
+      track: track,
+      release_status: release_status,
+      aab: AAB_PATH,
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true,
+    )
+  end
+
+  desc "Build AAB and upload to Play Store"
+  lane :release do |options|
+    build unless options[:skip_build]
+    upload(options)
+  end
+end
