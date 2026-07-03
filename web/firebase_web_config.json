@@ -1,8 +1,12 @@
 {
   "projectId": "mymaps-b534f",
   "appId": "1:599945759594:web:3bc2a9ca20bd9e7be1f313",
+  "databaseURL": "https://mymaps-b534f.firebaseio.com",
   "storageBucket": "mymaps-b534f.firebasestorage.app",
+  "locationId": "us-central",
   "apiKey": "AIzaSyAS-pI1BhW-xECiyokWFMFOE8X1wIk63Hw",
   "authDomain": "mymaps-b534f.firebaseapp.com",
-  "messagingSenderId": "599945759594"
+  "messagingSenderId": "599945759594",
+  "projectNumber": "599945759594",
+  "version": "2"
 }
