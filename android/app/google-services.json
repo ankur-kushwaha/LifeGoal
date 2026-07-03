@@ -15,11 +15,27 @@
       },
       "oauth_client": [
         {
+          "client_id": "599945759594-5lelr5hjnn8hkcq62iquf033fcbgr4j6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lifegoal.app.lifegoal_app",
+            "certificate_hash": "bbb16c9cfa0c8ca7ae24980b276a1c68c867ce7a"
+          }
+        },
+        {
           "client_id": "599945759594-e5aqdb9saat2q6djdjb8cf8980a3o73n.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.lifegoal.app.lifegoal_app",
             "certificate_hash": "f760d146a1f43d318b74a05ad49cc5cd19409723"
+          }
+        },
+        {
+          "client_id": "599945759594-khrtp7i4mjgva4951h09pk2qjc7idd0q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lifegoal.app.lifegoal_app",
+            "certificate_hash": "7ef14ab0210c393723690373588b105cc276b618"
           }
         },
         {
