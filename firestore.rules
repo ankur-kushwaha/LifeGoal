@@ -58,6 +58,24 @@ service cloud.firestore {
         (!('today' in data) || (data.today is string && data.today.size() <= 40));
     }
 
+    function isValidNotification(data) {
+      return data.keys().hasAll(['id', 'title', 'body', 'suggestedAction', 'trigger', 'createdAt', 'isRead']) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 64 &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+        data.body is string && data.body.size() <= 2000 &&
+        data.suggestedAction is string && data.suggestedAction.size() <= 500 &&
+        data.trigger is string && data.trigger in ['scheduled', 'custom', 'event', 'daily'] &&
+        data.createdAt is string && data.createdAt.size() <= 40 &&
+        data.isRead is bool &&
+        (!('isAiGenerated' in data) || data.isAiGenerated is bool) &&
+        (!('eventName' in data) || (data.eventName is string && data.eventName.size() <= 100)) &&
+        (!('relatedGoalId' in data) || (data.relatedGoalId is string && data.relatedGoalId.size() <= 64)) &&
+        data.keys().hasOnly([
+          'id', 'title', 'body', 'suggestedAction', 'trigger',
+          'eventName', 'relatedGoalId', 'createdAt', 'isRead', 'isAiGenerated'
+        ]);
+    }
+
     function isValidUserProfile(data) {
       return data.keys().hasOnly(['familyId', 'email', 'displayName', 'globalInflation', 'globalReturn', 'today']) &&
         (!('familyId' in data) || data.familyId is string) &&
@@ -108,6 +126,12 @@ service cloud.firestore {
         allow read: if isFamilyAdmin(familyId);
         allow create, update: if isFamilyAdmin(familyId);
         allow delete: if isFamilyAdmin(familyId);
+      }
+
+      match /notifications/{notificationId} {
+        allow read: if isFamilyMember(familyId);
+        allow create, update: if isFamilyMember(familyId) && isValidNotification(request.resource.data);
+        allow delete: if isFamilyMember(familyId);
       }
     }
 

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/goal_model.dart';
 import '../providers/goal_provider.dart';
+import '../providers/notification_provider.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/multipoint_progress_bar.dart';
 import '../widgets/pwa_install_banner.dart';
@@ -11,6 +12,7 @@ import '../data/spreadsheet_goals.dart';
 import 'family_screen.dart';
 import 'goal_detail_screen.dart';
 import 'goal_form_screen.dart';
+import 'notifications_screen.dart';
 import '../app_routes.dart';
 
 enum _SipFilter { all, needsSip, fullyFunded }
@@ -36,6 +38,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<GoalProvider>(context);
+    final notificationProvider = Provider.of<NotificationProvider>(context);
     final theme = Theme.of(context);
 
     // Filter goals by family member and SIP status
@@ -70,6 +73,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         actions: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined, color: kMoneyGreen),
+                tooltip: 'AI Suggestions',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                  );
+                },
+              ),
+              if (notificationProvider.unreadCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.redAccent,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      notificationProvider.unreadCount > 9
+                          ? '9+'
+                          : '${notificationProvider.unreadCount}',
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
             icon: Icon(
               _isSettingsExpanded ? Icons.tune : Icons.tune_outlined,

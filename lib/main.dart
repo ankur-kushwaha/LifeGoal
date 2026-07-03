@@ -7,6 +7,7 @@ import 'app_routes.dart';
 import 'constants.dart';
 import 'firebase_options.dart';
 import 'providers/goal_provider.dart';
+import 'providers/notification_provider.dart';
 import 'widgets/app_shell.dart';
 
 void main() async {
@@ -26,8 +27,17 @@ void main() async {
   }
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => GoalProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => GoalProvider()),
+        ChangeNotifierProxyProvider<GoalProvider, NotificationProvider>(
+          create: (_) => NotificationProvider(),
+          update: (_, goalProvider, notificationProvider) {
+            notificationProvider!.attachToGoalProvider(goalProvider);
+            return notificationProvider;
+          },
+        ),
+      ],
       child: const MyApp(),
     ),
   );

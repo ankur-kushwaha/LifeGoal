@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/goal_model.dart';
 import '../providers/goal_provider.dart';
+import '../providers/notification_provider.dart';
 
 class _GoalPreset {
   final String id;
@@ -734,6 +735,10 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                         await provider.addGoal(newGoal);
                       }
                       if (!context.mounted) return;
+                      context.read<NotificationProvider>().triggerEvent(
+                            eventName: isEditMode ? 'goal_updated' : 'goal_created',
+                            relatedGoalId: newGoal.id,
+                          );
                       Navigator.pop(context, newGoal.account);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
