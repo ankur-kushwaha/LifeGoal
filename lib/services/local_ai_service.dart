@@ -16,6 +16,10 @@ class LocalAIService {
   }) {
     final recentBodies = recentNotifications.map((n) => n.body.toLowerCase()).toSet();
     final recentActions = recentNotifications.map((n) => n.suggestedAction.toLowerCase()).toSet();
+    final recentGoalIds = recentNotifications
+        .map((n) => n.relatedGoalId)
+        .whereType<String>()
+        .toSet();
 
     if (goals.isEmpty) {
       return _build(
@@ -100,6 +104,8 @@ class LocalAIService {
     for (final candidate in candidates) {
       final bodyKey = candidate.body.toLowerCase();
       final actionKey = candidate.suggestedAction.toLowerCase();
+      final goalId = candidate.relatedGoalId;
+      if (goalId != null && recentGoalIds.contains(goalId)) continue;
       if (!recentBodies.contains(bodyKey) && !recentActions.contains(actionKey)) {
         return _build(
           title: candidate.title,

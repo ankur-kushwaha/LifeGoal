@@ -58,6 +58,30 @@ service cloud.firestore {
         (!('today' in data) || (data.today is string && data.today.size() <= 40));
     }
 
+    function isValidFamilyProfile(fp) {
+      return fp is map &&
+        (!('monthlyHouseholdIncome' in fp) || (fp.monthlyHouseholdIncome is number && fp.monthlyHouseholdIncome >= 0)) &&
+        (!('monthlyHouseholdExpenses' in fp) || (fp.monthlyHouseholdExpenses is number && fp.monthlyHouseholdExpenses >= 0)) &&
+        (!('emergencyFundMonths' in fp) || fp.emergencyFundMonths in [3, 6, 12]) &&
+        (!('housingStatus' in fp) || fp.housingStatus in ['rent', 'own', 'planning_to_buy']) &&
+        (!('hasHealthInsurance' in fp) || fp.hasHealthInsurance is bool) &&
+        (!('hasLifeInsurance' in fp) || fp.hasLifeInsurance is bool) &&
+        (!('dependents' in fp) || (fp.dependents is list && fp.dependents.size() <= 20)) &&
+        (!('loans' in fp) || (fp.loans is list && fp.loans.size() <= 20)) &&
+        (!('updatedAt' in fp) || (fp.updatedAt is string && fp.updatedAt.size() <= 40));
+    }
+
+    function isValidMemberProfile(mp) {
+      return mp is map &&
+        (!('dateOfBirth' in mp) || (mp.dateOfBirth is string && mp.dateOfBirth.size() <= 40)) &&
+        (!('monthlyIncome' in mp) || (mp.monthlyIncome is number && mp.monthlyIncome >= 0)) &&
+        (!('monthlyExpenses' in mp) || (mp.monthlyExpenses is number && mp.monthlyExpenses >= 0)) &&
+        (!('employmentType' in mp) || mp.employmentType is string) &&
+        (!('riskAppetite' in mp) || mp.riskAppetite is string) &&
+        (!('retirementAge' in mp) || (mp.retirementAge is int && mp.retirementAge >= 50 && mp.retirementAge <= 70)) &&
+        (!('updatedAt' in mp) || (mp.updatedAt is string && mp.updatedAt.size() <= 40));
+    }
+
     function isValidNotification(data) {
       return data.keys().hasAll(['id', 'title', 'body', 'suggestedAction', 'trigger', 'createdAt', 'isRead']) &&
         data.id is string && data.id.size() > 0 && data.id.size() <= 64 &&
@@ -68,11 +92,18 @@ service cloud.firestore {
         data.createdAt is string && data.createdAt.size() <= 40 &&
         data.isRead is bool &&
         (!('isAiGenerated' in data) || data.isAiGenerated is bool) &&
+        (!('suggestionType' in data) || (data.suggestionType is string && data.suggestionType.size() <= 40)) &&
+        (!('suggestedNewGoalName' in data) || (data.suggestedNewGoalName is string && data.suggestedNewGoalName.size() <= 200)) &&
+        (!('suggestedNewGoalTargetCost' in data) || data.suggestedNewGoalTargetCost is number) &&
+        (!('suggestedNewGoalMonths' in data) || data.suggestedNewGoalMonths is int) &&
+        (!('suggestedNewGoalAccount' in data) || (data.suggestedNewGoalAccount is string && data.suggestedNewGoalAccount.size() <= 100)) &&
         (!('eventName' in data) || (data.eventName is string && data.eventName.size() <= 100)) &&
         (!('relatedGoalId' in data) || (data.relatedGoalId is string && data.relatedGoalId.size() <= 64)) &&
         data.keys().hasOnly([
           'id', 'title', 'body', 'suggestedAction', 'trigger',
-          'eventName', 'relatedGoalId', 'createdAt', 'isRead', 'isAiGenerated'
+          'eventName', 'relatedGoalId', 'createdAt', 'isRead', 'isAiGenerated',
+          'suggestionType', 'suggestedNewGoalName', 'suggestedNewGoalTargetCost',
+          'suggestedNewGoalMonths', 'suggestedNewGoalAccount'
         ]);
     }
 
@@ -101,8 +132,13 @@ service cloud.firestore {
         request.resource.data.adminId == request.auth.uid;
       allow update: if (
           (isFamilyAdmin(familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])) ||
-          (isFamilyMember(familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['globalInflation', 'globalReturn', 'today']))
-        ) && isValidFamilySettings(request.resource.data);
+          (isFamilyMember(familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['globalInflation', 'globalReturn', 'today'])) ||
+          (isFamilyMember(familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['familyProfile']) &&
+            isValidFamilyProfile(request.resource.data.familyProfile))
+        ) && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['globalInflation', 'globalReturn', 'today']) ||
+          isValidFamilySettings(request.resource.data)
+        );
       allow delete: if isFamilyAdmin(familyId);
 
       match /members/{memberId} {
@@ -111,7 +147,12 @@ service cloud.firestore {
           (memberId == request.auth.uid && request.resource.data.role in ['admin', 'member']) ||
           isFamilyAdmin(familyId)
         );
-        allow update: if isFamilyAdmin(familyId);
+        allow update: if isFamilyMember(familyId) && (
+          isFamilyAdmin(familyId) ||
+          (memberId == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberProfile']) &&
+            isValidMemberProfile(request.resource.data.memberProfile))
+        );
         allow delete: if isFamilyAdmin(familyId) &&
           memberId != get(/databases/$(database)/documents/families/$(familyId)).data.adminId;
       }

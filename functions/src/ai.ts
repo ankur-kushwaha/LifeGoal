@@ -14,6 +14,7 @@ interface RecentNotification {
   title: string;
   body: string;
   suggestedAction: string;
+  relatedGoalId?: string;
 }
 
 interface AIResult {
@@ -21,6 +22,11 @@ interface AIResult {
   body: string;
   suggestedAction: string;
   relatedGoalId?: string;
+  suggestionType?: string;
+  suggestedNewGoalName?: string;
+  suggestedNewGoalTargetCost?: number;
+  suggestedNewGoalMonths?: number;
+  suggestedNewGoalAccount?: string;
 }
 
 export function buildGoalContext(
@@ -145,21 +151,201 @@ function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+interface FamilyProfileData {
+  monthlyHouseholdIncome?: number;
+  monthlyHouseholdExpenses?: number;
+  emergencyFundMonths?: number;
+  housingStatus?: string;
+  hasHealthInsurance?: boolean;
+  hasLifeInsurance?: boolean;
+  dependents?: Array<{
+    name?: string;
+    relationship?: string;
+    dateOfBirth?: string;
+  }>;
+  loans?: Array<{
+    type?: string;
+    emi?: number;
+    remainingMonths?: number;
+    outstandingAmount?: number;
+  }>;
+}
+
+interface MemberProfileData {
+  dateOfBirth?: string;
+  monthlyIncome?: number;
+  monthlyExpenses?: number;
+  employmentType?: string;
+  riskAppetite?: string;
+  retirementAge?: number;
+}
+
+function housingLabel(status?: string): string {
+  switch (status) {
+    case "own":
+      return "Own home";
+    case "planning_to_buy":
+      return "Planning to buy";
+    default:
+      return "Renting";
+  }
+}
+
+function loanTypeLabel(type?: string): string {
+  switch (type) {
+    case "home":
+      return "Home loan";
+    case "car":
+      return "Car loan";
+    case "education":
+      return "Education loan";
+    case "other":
+      return "Other";
+    default:
+      return "Personal loan";
+  }
+}
+
+function relationshipLabel(rel?: string): string {
+  switch (rel) {
+    case "parent":
+      return "Parent";
+    case "spouse":
+      return "Spouse";
+    case "other":
+      return "Other";
+    default:
+      return "Child";
+  }
+}
+
+function ageFromDob(dob?: string): number | null {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (Number.isNaN(birth.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - birth.getFullYear();
+  const monthDiff = now.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+}
+
+export function buildFamilyProfileContext(
+  familyProfile?: FamilyProfileData,
+  members?: Array<{ name: string; profile?: MemberProfileData }>,
+): string {
+  if (!familyProfile && (!members || members.length === 0)) {
+    return "Family profile not filled in yet.";
+  }
+
+  const fp = familyProfile ?? {};
+  const lines: string[] = ["=== Family financial profile ==="];
+
+  if (fp.monthlyHouseholdIncome != null) {
+    lines.push(`Household income: ₹${formatInr(fp.monthlyHouseholdIncome)}`);
+  }
+  if (fp.monthlyHouseholdExpenses != null) {
+    lines.push(`Household expenses: ₹${formatInr(fp.monthlyHouseholdExpenses)}`);
+  }
+
+  const totalEmi = (fp.loans ?? []).reduce((sum, loan) => sum + (loan.emi ?? 0), 0);
+  if (totalEmi > 0) {
+    lines.push(`Total loan EMI: ₹${formatInr(totalEmi)}`);
+  }
+
+  if (fp.monthlyHouseholdIncome != null && fp.monthlyHouseholdExpenses != null) {
+    const surplus = fp.monthlyHouseholdIncome - fp.monthlyHouseholdExpenses - totalEmi;
+    lines.push(`Estimated monthly surplus for goals: ₹${formatInr(surplus)}`);
+  }
+
+  const emergencyMonths = fp.emergencyFundMonths ?? 6;
+  if (fp.monthlyHouseholdExpenses != null) {
+    lines.push(
+      `Emergency fund target (${emergencyMonths} months): ₹${formatInr(fp.monthlyHouseholdExpenses * emergencyMonths)}`,
+    );
+  }
+
+  lines.push(`Housing: ${housingLabel(fp.housingStatus)}`);
+  lines.push(`Health insurance: ${fp.hasHealthInsurance ? "yes" : "no"}`);
+  lines.push(`Life insurance: ${fp.hasLifeInsurance ? "yes" : "no"}`);
+
+  if (fp.dependents && fp.dependents.length > 0) {
+    lines.push("\nDependents:");
+    for (const dep of fp.dependents) {
+      const age = ageFromDob(dep.dateOfBirth);
+      lines.push(
+        `- ${dep.name ?? "Unknown"} (${relationshipLabel(dep.relationship)}${age != null ? `, age ${age}` : ""})`,
+      );
+    }
+  }
+
+  if (fp.loans && fp.loans.length > 0) {
+    lines.push("\nLoans:");
+    for (const loan of fp.loans) {
+      lines.push(
+        `- ${loanTypeLabel(loan.type)}: EMI ₹${formatInr(loan.emi ?? 0)}, ${loan.remainingMonths ?? 0} months left` +
+          (loan.outstandingAmount != null ? `, outstanding ₹${formatInr(loan.outstandingAmount)}` : ""),
+      );
+    }
+  }
+
+  if (members && members.length > 0) {
+    lines.push("\nMember profiles:");
+    for (const member of members) {
+      const p = member.profile ?? {};
+      const parts = [member.name];
+      const age = ageFromDob(p.dateOfBirth);
+      if (age != null) parts.push(`age ${age}`);
+      if (p.monthlyIncome != null) parts.push(`income ₹${formatInr(p.monthlyIncome)}`);
+      if (p.monthlyExpenses != null) parts.push(`expenses ₹${formatInr(p.monthlyExpenses)}`);
+      if (p.employmentType) parts.push(p.employmentType);
+      if (p.riskAppetite) parts.push(`risk: ${p.riskAppetite}`);
+      if (p.retirementAge) parts.push(`retire at ${p.retirementAge}`);
+      lines.push(`- ${parts.join(", ")}`);
+    }
+  }
+
+  const hasFamilyData =
+    fp.monthlyHouseholdIncome != null ||
+    fp.monthlyHouseholdExpenses != null ||
+    (fp.dependents?.length ?? 0) > 0 ||
+    (fp.loans?.length ?? 0) > 0;
+  const hasMemberData = members?.some((m) => {
+    const p = m.profile ?? {};
+    return p.dateOfBirth != null || p.monthlyIncome != null || p.monthlyExpenses != null;
+  });
+
+  if (!hasFamilyData && !hasMemberData) {
+    return "Family profile not filled in yet.";
+  }
+
+  return lines.join("\n");
+}
+
 export async function generateAINotification(params: {
   apiKey: string;
   goalContext: string;
+  profileContext?: string;
   recentNotifications: RecentNotification[];
   trigger: string;
   eventName?: string;
   relatedGoalId?: string;
 }): Promise<AIResult> {
+  const recentGoalIds = params.recentNotifications
+    .map((n) => n.relatedGoalId)
+    .filter((id): id is string => Boolean(id));
+  const blockedGoals =
+    recentGoalIds.length > 0 ? recentGoalIds.join(", ") : "none";
+
   const recentSummary =
     params.recentNotifications.length === 0
       ? "None"
       : params.recentNotifications
           .map(
             (n, i) =>
-              `${i + 1}. Title: ${n.title}\n   Action: ${n.suggestedAction}\n   Body: ${n.body}`,
+              `${i + 1}. Goal ID: ${n.relatedGoalId ?? "portfolio-wide"}\n   Title: ${n.title}\n   Action: ${n.suggestedAction}\n   Body: ${n.body}`,
           )
           .join("\n");
 
@@ -172,25 +358,51 @@ Each family has multiple goals. Every goal has this structure:
 - Current savings, projected value at target date, return %
 - Funding gap, progress %, required monthly SIP, health status
 
-Your job: analyze the portfolio data below and suggest ONE specific next action grounded in their actual numbers.
+Your job: analyze the portfolio and suggest ONE specific next step. This can be:
+A) An action on an existing goal (update savings, increase SIP, review assumptions)
+B) A NEW goal to add that is missing from their portfolio (emergency fund, retirement, child education, health corpus, home down payment, insurance buffer)
+C) A portfolio-wide review (rebalance SIP across members, total SIP vs capacity)
+
+Common goals Indian families often need but may be missing:
+- Emergency fund (3–6 months expenses)
+- Retirement corpus
+- Child education / marriage
+- Health / medical corpus
+- Home purchase down payment
+- Vacation / lifestyle goals
+
+If all existing goals are on track, suggest a NEW goal to add with a concrete name, target amount, timeline, and family member.
+
+Use the family financial profile (income, expenses, dependents, loans, insurance, member ages) to:
+- Check if emergency fund goal is missing when expenses are known
+- Suggest child education goals when dependents with ages are listed
+- Factor loan EMIs and monthly surplus when recommending SIP amounts
+- Flag missing life/health insurance when not covered
+- Align new goal timelines with dependent ages (e.g. education in ~15 years for a 3-year-old)
 
 Rules:
 1. Reference real goal names, family member accounts, ₹ amounts, SIP figures, progress %, or months remaining from the data.
 2. Prioritize goals that are "behind schedule" or "needs attention", or deadlines within 12 months.
 3. If event trigger relates to a specific goal, focus on that goal first.
-4. Suggest concrete app actions: update current savings, increase monthly SIP, review inflation/return assumptions, rebalance across family members, or top up a specific goal.
-5. Do NOT give generic advice like "save more" without citing their goal data.
-6. Do NOT repeat suggestions from recent notifications.
-7. Set relatedGoalId to the exact Goal ID from the data, or null if portfolio-wide.
+4. For existing goals: suggest update savings, increase SIP, review inflation/return, or top up.
+5. For missing goals: use suggestionType "add_new_goal" and fill suggestedNewGoal* fields with realistic Indian amounts.
+6. Do NOT give generic advice without citing their data.
+7. Do NOT repeat suggestions from recent notifications.
+8. Do NOT suggest goals whose Goal ID is in the blocked list — pick a different goal or suggest a new goal to add.
+9. Set relatedGoalId to an existing Goal ID, or null for new/portfolio-wide suggestions.
 
 Respond ONLY with valid JSON (no markdown):
-{"title":"short title","body":"2-3 sentences citing specific goals and numbers","suggestedAction":"one concrete action with goal name and amount if applicable","relatedGoalId":"goal id or null"}`;
+{"title":"short title","body":"2-3 sentences","suggestedAction":"concrete action","suggestionType":"action_on_goal|add_new_goal|portfolio_review","relatedGoalId":"goal id or null","suggestedNewGoalName":"name or null","suggestedNewGoalTargetCost":number or null,"suggestedNewGoalMonths":number or null,"suggestedNewGoalAccount":"family member name or null"}`;
 
   const userPrompt = `Trigger: ${params.trigger}
 Event: ${params.eventName ?? "none"}
 Related goal ID (if event): ${params.relatedGoalId ?? "none"}
 
 ${params.goalContext}
+
+${params.profileContext ?? "Family profile not filled in yet."}
+
+Blocked goal IDs (already suggested recently — do not use): ${blockedGoals}
 
 Recent notifications (do not repeat these):
 ${recentSummary}`;
@@ -236,6 +448,11 @@ ${recentSummary}`;
       body: parsed.body || "Review your goals and savings progress.",
       suggestedAction: parsed.suggestedAction || "Open the dashboard and update current savings.",
       relatedGoalId: goalId,
+      suggestionType: parsed.suggestionType,
+      suggestedNewGoalName: parsed.suggestedNewGoalName,
+      suggestedNewGoalTargetCost: parsed.suggestedNewGoalTargetCost,
+      suggestedNewGoalMonths: parsed.suggestedNewGoalMonths,
+      suggestedNewGoalAccount: parsed.suggestedNewGoalAccount,
     };
   } catch {
     return {

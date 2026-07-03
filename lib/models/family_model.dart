@@ -1,9 +1,12 @@
+import 'profile_model.dart';
+
 class FamilyMember {
   final String userId;
   final String email;
   final String? displayName;
   final FamilyRole role;
   final DateTime joinedAt;
+  final MemberProfile memberProfile;
 
   const FamilyMember({
     required this.userId,
@@ -11,6 +14,7 @@ class FamilyMember {
     this.displayName,
     required this.role,
     required this.joinedAt,
+    this.memberProfile = const MemberProfile(),
   });
 
   bool get isAdmin => role == FamilyRole.admin;
@@ -37,6 +41,9 @@ class FamilyMember {
       displayName: json['displayName'] as String?,
       role: FamilyRole.fromString(json['role'] as String? ?? 'member'),
       joinedAt: _parseDate(json['joinedAt']),
+      memberProfile: MemberProfile.fromJson(
+        json['memberProfile'] as Map<String, dynamic>?,
+      ),
     );
   }
 
@@ -45,7 +52,19 @@ class FamilyMember {
         if (displayName != null) 'displayName': displayName,
         'role': role.name,
         'joinedAt': joinedAt.toIso8601String(),
+        if (!memberProfile.isEmpty) 'memberProfile': memberProfile.toJson(),
       };
+
+  FamilyMember copyWith({MemberProfile? memberProfile}) {
+    return FamilyMember(
+      userId: userId,
+      email: email,
+      displayName: displayName,
+      role: role,
+      joinedAt: joinedAt,
+      memberProfile: memberProfile ?? this.memberProfile,
+    );
+  }
 
   static String _nameFromEmail(String email) {
     final local = email.split('@').first;

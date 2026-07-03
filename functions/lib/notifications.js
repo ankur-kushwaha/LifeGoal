@@ -54,6 +54,7 @@ async function getRecentNotifications(familyId, limit) {
             title: String(data.title ?? ""),
             body: String(data.body ?? ""),
             suggestedAction: String(data.suggestedAction ?? ""),
+            relatedGoalId: data.relatedGoalId ? String(data.relatedGoalId) : undefined,
         };
     });
 }
@@ -74,6 +75,21 @@ async function saveNotification(familyId, data) {
     }
     if (data.relatedGoalId) {
         notification.relatedGoalId = data.relatedGoalId;
+    }
+    if (data.suggestionType) {
+        notification.suggestionType = data.suggestionType;
+    }
+    if (data.suggestedNewGoalName) {
+        notification.suggestedNewGoalName = data.suggestedNewGoalName;
+    }
+    if (data.suggestedNewGoalTargetCost != null) {
+        notification.suggestedNewGoalTargetCost = data.suggestedNewGoalTargetCost;
+    }
+    if (data.suggestedNewGoalMonths != null) {
+        notification.suggestedNewGoalMonths = data.suggestedNewGoalMonths;
+    }
+    if (data.suggestedNewGoalAccount) {
+        notification.suggestedNewGoalAccount = data.suggestedNewGoalAccount;
     }
     await db()
         .collection("families")

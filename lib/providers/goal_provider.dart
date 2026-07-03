@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/family_model.dart';
 import '../models/goal_model.dart';
+import '../models/profile_model.dart';
 import '../services/auth_service.dart';
 import '../services/family_service.dart';
+import '../services/profile_service.dart';
 import '../services/storage_service.dart';
 import '../firebase_options.dart';
 import '../data/spreadsheet_goals.dart';
@@ -19,9 +21,11 @@ class GoalProvider extends ChangeNotifier {
   late BaseAuthService _authService;
   late BaseStorageService _storageService;
   late BaseFamilyService _familyService;
+  late BaseProfileService _profileService;
   String? _currentUserId;
   String? _currentFamilyId;
   FamilyInfo? _family;
+  FamilyProfile _familyProfile = const FamilyProfile();
   List<FamilyMember> _familyMembers = [];
   List<FamilyInvite> _pendingInvites = [];
 
@@ -31,6 +35,7 @@ class GoalProvider extends ChangeNotifier {
   StreamSubscription<FamilyInfo?>? _familySubscription;
   StreamSubscription<List<FamilyMember>>? _membersSubscription;
   StreamSubscription<List<FamilyInvite>>? _invitesSubscription;
+  StreamSubscription<FamilyProfile>? _familyProfileSubscription;
 
   List<GoalModel> get goals => _goals;
   double get globalInflation => _globalInflation;
@@ -42,6 +47,7 @@ class GoalProvider extends ChangeNotifier {
   String? get currentFamilyId => _currentFamilyId;
   bool get isAuthenticated => _currentUserId != null;
   FamilyInfo? get family => _family;
+  FamilyProfile get familyProfile => _familyProfile;
   List<FamilyMember> get familyMembers => _familyMembers;
   List<FamilyInvite> get pendingInvites => _pendingInvites;
 
@@ -130,6 +136,7 @@ class GoalProvider extends ChangeNotifier {
     _familySubscription?.cancel();
     _membersSubscription?.cancel();
     _invitesSubscription?.cancel();
+    _familyProfileSubscription?.cancel();
   }
 
   Future<void> _initializeServices() async {
@@ -145,10 +152,12 @@ class GoalProvider extends ChangeNotifier {
       _authService = FirebaseAuthService();
       _storageService = FirestoreStorageService();
       _familyService = FirestoreFamilyService();
+      _profileService = FirestoreProfileService();
     } else {
       _authService = LocalMockAuthService();
       _storageService = SharedPreferencesStorageService();
       _familyService = LocalFamilyService();
+      _profileService = SharedPreferencesProfileService();
     }
 
     _authSubscription = _authService.onAuthStateChanged.listen((userId) {
@@ -162,6 +171,7 @@ class GoalProvider extends ChangeNotifier {
     _familySubscription?.cancel();
     _membersSubscription?.cancel();
     _invitesSubscription?.cancel();
+    _familyProfileSubscription?.cancel();
 
     if (userId != null) {
       _currentUserId = userId;
@@ -207,6 +217,12 @@ class GoalProvider extends ChangeNotifier {
         notifyListeners();
       });
 
+      _familyProfileSubscription =
+          _profileService.streamFamilyProfile(_currentFamilyId!).listen((profile) {
+        _familyProfile = profile;
+        notifyListeners();
+      });
+
       _goalsSubscription = _storageService.streamGoals(_currentFamilyId!).listen((goalsList) {
         _goals = goalsList;
         _isLoading = false;
@@ -235,6 +251,7 @@ class GoalProvider extends ChangeNotifier {
       _currentUserId = null;
       _currentFamilyId = null;
       _family = null;
+      _familyProfile = const FamilyProfile();
       _familyMembers = [];
       _pendingInvites = [];
       _goals = [];
@@ -324,6 +341,40 @@ class GoalProvider extends ChangeNotifier {
       familyId: _currentFamilyId!,
       name: name,
       adminId: _currentUserId!,
+    );
+  }
+
+  Future<void> saveFamilyProfile(FamilyProfile profile) async {
+    if (_currentFamilyId == null) {
+      throw Exception('Family not ready yet.');
+    }
+    await _profileService.saveFamilyProfile(_currentFamilyId!, profile);
+    _familyProfile = profile;
+    notifyListeners();
+  }
+
+  Future<void> saveMemberProfile(String memberId, MemberProfile profile) async {
+    if (_currentFamilyId == null) {
+      throw Exception('Family not ready yet.');
+    }
+    await _profileService.saveMemberProfile(_currentFamilyId!, memberId, profile);
+    _familyMembers = _familyMembers
+        .map((m) => m.userId == memberId ? m.copyWith(memberProfile: profile) : m)
+        .toList();
+    notifyListeners();
+  }
+
+  Future<MemberProfile> loadMemberProfile(String memberId) async {
+    if (_currentFamilyId == null) return const MemberProfile();
+    return _profileService.getMemberProfile(_currentFamilyId!, memberId);
+  }
+
+  String get familyProfileContextText {
+    return buildFamilyProfileContextText(
+      familyProfile: _familyProfile,
+      members: _familyMembers
+          .map((m) => (name: m.label, profile: m.memberProfile))
+          .toList(),
     );
   }
 

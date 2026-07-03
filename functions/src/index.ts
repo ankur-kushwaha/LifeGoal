@@ -3,7 +3,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
-import { generateAINotification, buildGoalContext } from "./ai";
+import { generateAINotification, buildGoalContext, buildFamilyProfileContext } from "./ai";
 import { saveNotification, getRecentNotifications } from "./notifications";
 
 admin.initializeApp();
@@ -41,13 +41,34 @@ async function generateForFamily(
     .get();
 
   const goals = goalsSnapshot.docs.map((doc) => doc.data());
+  const membersSnapshot = await firestore
+    .collection("families")
+    .doc(familyId)
+    .collection("members")
+    .get();
+  const memberProfiles = membersSnapshot.docs.map((doc) => {
+    const data = doc.data();
+    const name =
+      (data.displayName as string | undefined) ||
+      (data.email as string | undefined) ||
+      doc.id;
+    return {
+      name,
+      profile: data.memberProfile as Record<string, unknown> | undefined,
+    };
+  });
   const recent = await getRecentNotifications(familyId, 5);
-  const context = buildGoalContext(
+  const goalContext = buildGoalContext(
     goals,
     familyData.globalInflation ?? 6,
     familyData.globalReturn ?? 14,
     familyData.today ?? new Date().toISOString(),
   );
+  const profileContext = buildFamilyProfileContext(
+    familyData.familyProfile as Record<string, unknown> | undefined,
+    memberProfiles,
+  );
+  const context = goalContext;
 
   const apiKey = openRouterKey.value();
   if (!apiKey) {
@@ -59,11 +80,34 @@ async function generateForFamily(
     aiResult = await generateAINotification({
       apiKey,
       goalContext: context,
+      profileContext,
       recentNotifications: recent,
       trigger,
       eventName,
       relatedGoalId,
     });
+
+    const blockedIds = new Set(
+      recent.map((n) => n.relatedGoalId).filter((id): id is string => Boolean(id)),
+    );
+    if (
+      aiResult.relatedGoalId &&
+      blockedIds.has(aiResult.relatedGoalId) &&
+      recent.length > 0
+    ) {
+      console.log(
+        `AI repeated goal ${aiResult.relatedGoalId}, retrying with blocked list`,
+      );
+      aiResult = await generateAINotification({
+        apiKey,
+        goalContext: context,
+        profileContext,
+        recentNotifications: recent,
+        trigger,
+        eventName,
+        relatedGoalId,
+      });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI generation failed";
     console.error("OpenRouter generation failed:", message);
@@ -77,6 +121,11 @@ async function generateForFamily(
     trigger,
     eventName,
     relatedGoalId: aiResult.relatedGoalId ?? relatedGoalId,
+    suggestionType: aiResult.suggestionType,
+    suggestedNewGoalName: aiResult.suggestedNewGoalName,
+    suggestedNewGoalTargetCost: aiResult.suggestedNewGoalTargetCost,
+    suggestedNewGoalMonths: aiResult.suggestedNewGoalMonths,
+    suggestedNewGoalAccount: aiResult.suggestedNewGoalAccount,
   });
 
   return notification;

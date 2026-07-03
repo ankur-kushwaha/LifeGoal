@@ -16,12 +16,17 @@ export interface SavedNotification {
   createdAt: string;
   isRead: boolean;
   isAiGenerated: boolean;
+  suggestionType?: string;
+  suggestedNewGoalName?: string;
+  suggestedNewGoalTargetCost?: number;
+  suggestedNewGoalMonths?: number;
+  suggestedNewGoalAccount?: string;
 }
 
 export async function getRecentNotifications(
   familyId: string,
   limit: number,
-): Promise<Array<{ title: string; body: string; suggestedAction: string }>> {
+): Promise<Array<{ title: string; body: string; suggestedAction: string; relatedGoalId?: string }>> {
   const snapshot = await db()
     .collection("families")
     .doc(familyId)
@@ -36,6 +41,7 @@ export async function getRecentNotifications(
       title: String(data.title ?? ""),
       body: String(data.body ?? ""),
       suggestedAction: String(data.suggestedAction ?? ""),
+      relatedGoalId: data.relatedGoalId ? String(data.relatedGoalId) : undefined,
     };
   });
 }
@@ -49,6 +55,11 @@ export async function saveNotification(
     trigger: string;
     eventName?: string;
     relatedGoalId?: string;
+    suggestionType?: string;
+    suggestedNewGoalName?: string;
+    suggestedNewGoalTargetCost?: number;
+    suggestedNewGoalMonths?: number;
+    suggestedNewGoalAccount?: string;
   },
 ): Promise<SavedNotification> {
   const id = `${Date.now()}`;
@@ -68,6 +79,21 @@ export async function saveNotification(
   }
   if (data.relatedGoalId) {
     notification.relatedGoalId = data.relatedGoalId;
+  }
+  if (data.suggestionType) {
+    notification.suggestionType = data.suggestionType;
+  }
+  if (data.suggestedNewGoalName) {
+    notification.suggestedNewGoalName = data.suggestedNewGoalName;
+  }
+  if (data.suggestedNewGoalTargetCost != null) {
+    notification.suggestedNewGoalTargetCost = data.suggestedNewGoalTargetCost;
+  }
+  if (data.suggestedNewGoalMonths != null) {
+    notification.suggestedNewGoalMonths = data.suggestedNewGoalMonths;
+  }
+  if (data.suggestedNewGoalAccount) {
+    notification.suggestedNewGoalAccount = data.suggestedNewGoalAccount;
   }
 
   await db()

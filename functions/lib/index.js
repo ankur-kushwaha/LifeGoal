@@ -66,8 +66,25 @@ async function generateForFamily(familyId, trigger, eventName, relatedGoalId) {
         .collection("goals")
         .get();
     const goals = goalsSnapshot.docs.map((doc) => doc.data());
+    const membersSnapshot = await firestore
+        .collection("families")
+        .doc(familyId)
+        .collection("members")
+        .get();
+    const memberProfiles = membersSnapshot.docs.map((doc) => {
+        const data = doc.data();
+        const name = data.displayName ||
+            data.email ||
+            doc.id;
+        return {
+            name,
+            profile: data.memberProfile,
+        };
+    });
     const recent = await (0, notifications_1.getRecentNotifications)(familyId, 5);
-    const context = (0, ai_1.buildGoalContext)(goals, familyData.globalInflation ?? 6, familyData.globalReturn ?? 14, familyData.today ?? new Date().toISOString());
+    const goalContext = (0, ai_1.buildGoalContext)(goals, familyData.globalInflation ?? 6, familyData.globalReturn ?? 14, familyData.today ?? new Date().toISOString());
+    const profileContext = (0, ai_1.buildFamilyProfileContext)(familyData.familyProfile, memberProfiles);
+    const context = goalContext;
     const apiKey = openRouterKey.value();
     if (!apiKey) {
         throw new https_1.HttpsError("failed-precondition", "OPENROUTER_API_KEY secret is not configured");
@@ -77,11 +94,27 @@ async function generateForFamily(familyId, trigger, eventName, relatedGoalId) {
         aiResult = await (0, ai_1.generateAINotification)({
             apiKey,
             goalContext: context,
+            profileContext,
             recentNotifications: recent,
             trigger,
             eventName,
             relatedGoalId,
         });
+        const blockedIds = new Set(recent.map((n) => n.relatedGoalId).filter((id) => Boolean(id)));
+        if (aiResult.relatedGoalId &&
+            blockedIds.has(aiResult.relatedGoalId) &&
+            recent.length > 0) {
+            console.log(`AI repeated goal ${aiResult.relatedGoalId}, retrying with blocked list`);
+            aiResult = await (0, ai_1.generateAINotification)({
+                apiKey,
+                goalContext: context,
+                profileContext,
+                recentNotifications: recent,
+                trigger,
+                eventName,
+                relatedGoalId,
+            });
+        }
     }
     catch (error) {
         const message = error instanceof Error ? error.message : "AI generation failed";
@@ -95,6 +128,11 @@ async function generateForFamily(familyId, trigger, eventName, relatedGoalId) {
         trigger,
         eventName,
         relatedGoalId: aiResult.relatedGoalId ?? relatedGoalId,
+        suggestionType: aiResult.suggestionType,
+        suggestedNewGoalName: aiResult.suggestedNewGoalName,
+        suggestedNewGoalTargetCost: aiResult.suggestedNewGoalTargetCost,
+        suggestedNewGoalMonths: aiResult.suggestedNewGoalMonths,
+        suggestedNewGoalAccount: aiResult.suggestedNewGoalAccount,
     });
     return notification;
 }

@@ -20,6 +20,34 @@ enum NotificationTrigger {
   String toJson() => name;
 }
 
+enum SuggestionType {
+  actionOnGoal,
+  addNewGoal,
+  portfolioReview;
+
+  static SuggestionType fromString(String? value) {
+    switch (value) {
+      case 'add_new_goal':
+        return SuggestionType.addNewGoal;
+      case 'portfolio_review':
+        return SuggestionType.portfolioReview;
+      default:
+        return SuggestionType.actionOnGoal;
+    }
+  }
+
+  String toJson() {
+    switch (this) {
+      case SuggestionType.addNewGoal:
+        return 'add_new_goal';
+      case SuggestionType.portfolioReview:
+        return 'portfolio_review';
+      case SuggestionType.actionOnGoal:
+        return 'action_on_goal';
+    }
+  }
+}
+
 class AppNotification {
   final String id;
   final String title;
@@ -31,6 +59,11 @@ class AppNotification {
   final DateTime createdAt;
   final bool isRead;
   final bool isAiGenerated;
+  final SuggestionType suggestionType;
+  final String? suggestedNewGoalName;
+  final double? suggestedNewGoalTargetCost;
+  final int? suggestedNewGoalMonths;
+  final String? suggestedNewGoalAccount;
 
   AppNotification({
     required this.id,
@@ -43,6 +76,11 @@ class AppNotification {
     required this.createdAt,
     this.isRead = false,
     this.isAiGenerated = false,
+    this.suggestionType = SuggestionType.actionOnGoal,
+    this.suggestedNewGoalName,
+    this.suggestedNewGoalTargetCost,
+    this.suggestedNewGoalMonths,
+    this.suggestedNewGoalAccount,
   });
 
   Map<String, dynamic> toJson() {
@@ -57,6 +95,11 @@ class AppNotification {
       'createdAt': createdAt.toIso8601String(),
       'isRead': isRead,
       'isAiGenerated': isAiGenerated,
+      'suggestionType': suggestionType.toJson(),
+      if (suggestedNewGoalName != null) 'suggestedNewGoalName': suggestedNewGoalName,
+      if (suggestedNewGoalTargetCost != null) 'suggestedNewGoalTargetCost': suggestedNewGoalTargetCost,
+      if (suggestedNewGoalMonths != null) 'suggestedNewGoalMonths': suggestedNewGoalMonths,
+      if (suggestedNewGoalAccount != null) 'suggestedNewGoalAccount': suggestedNewGoalAccount,
     };
   }
 
@@ -72,6 +115,11 @@ class AppNotification {
       createdAt: parseNotificationDate(json['createdAt']),
       isRead: json['isRead'] as bool? ?? false,
       isAiGenerated: json['isAiGenerated'] as bool? ?? false,
+      suggestionType: SuggestionType.fromString(json['suggestionType'] as String?),
+      suggestedNewGoalName: json['suggestedNewGoalName'] as String?,
+      suggestedNewGoalTargetCost: (json['suggestedNewGoalTargetCost'] as num?)?.toDouble(),
+      suggestedNewGoalMonths: json['suggestedNewGoalMonths'] as int?,
+      suggestedNewGoalAccount: json['suggestedNewGoalAccount'] as String?,
     );
   }
 

@@ -256,6 +256,57 @@ class _NotificationCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(notification.body, style: const TextStyle(color: Colors.black87, height: 1.4)),
               const SizedBox(height: 12),
+              if (notification.suggestionType == SuggestionType.addNewGoal &&
+                  notification.suggestedNewGoalName != null)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.shade100),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.add_circle_outline, size: 18, color: Colors.blue.shade700),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Suggested new goal',
+                            style: TextStyle(
+                              color: Colors.blue.shade800,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        notification.suggestedNewGoalName!,
+                        style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500),
+                      ),
+                      if (notification.suggestedNewGoalTargetCost != null ||
+                          notification.suggestedNewGoalMonths != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            [
+                              if (notification.suggestedNewGoalTargetCost != null)
+                                'Target: ₹${NumberFormat.decimalPattern('en_IN').format(notification.suggestedNewGoalTargetCost!.round())}',
+                              if (notification.suggestedNewGoalMonths != null)
+                                'Timeline: ${notification.suggestedNewGoalMonths} months',
+                              if (notification.suggestedNewGoalAccount != null)
+                                'For: ${notification.suggestedNewGoalAccount}',
+                            ].join(' · '),
+                            style: TextStyle(color: Colors.blue.shade900, fontSize: 12),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),

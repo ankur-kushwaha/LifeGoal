@@ -20,6 +20,8 @@ class NotificationProvider extends ChangeNotifier {
 
   GoalProvider? _goalProvider;
   StreamSubscription<List<AppNotification>>? _subscription;
+  DateTime? _lastGeneratedAt;
+  static const _generationCooldown = Duration(minutes: 2);
 
   List<AppNotification> get notifications => _notifications;
   bool get isGenerating => _isGenerating;
@@ -77,21 +79,23 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   Future<void> _maybeRunScheduledGeneration() async {
-    if (_familyId == null || _goalProvider == null) return;
+    if (_familyId == null || _goalProvider == null || _isGenerating) return;
 
-    final lastScheduled = _notifications
+    final recent = await _notificationService.getRecentNotifications(_familyId!, limit: 10);
+    final now = DateTime.now();
+    final today10AM = DateTime(now.year, now.month, now.day, 10);
+    if (now.isBefore(today10AM)) return;
+
+    final lastScheduled = recent
         .where((n) => n.trigger == NotificationTrigger.scheduled)
         .fold<DateTime?>(null, (latest, n) {
       if (latest == null || n.createdAt.isAfter(latest)) return n.createdAt;
       return latest;
     });
 
-    final now = DateTime.now();
-    final today10AM = DateTime(now.year, now.month, now.day, 10);
-    if (now.isAfter(today10AM) &&
-        (lastScheduled == null || lastScheduled.isBefore(today10AM))) {
-      await triggerScheduled(silent: true);
-    }
+    if (lastScheduled != null && !lastScheduled.isBefore(today10AM)) return;
+
+    await triggerScheduled(silent: true);
   }
 
   Future<AppNotification?> triggerScheduled({bool silent = false}) {
@@ -128,6 +132,14 @@ class NotificationProvider extends ChangeNotifier {
   }) async {
     if (_familyId == null || _goalProvider == null || _isGenerating) return null;
 
+    if (trigger != NotificationTrigger.event &&
+        _lastGeneratedAt != null &&
+        DateTime.now().difference(_lastGeneratedAt!) < _generationCooldown) {
+      _error = 'Please wait a moment before requesting another suggestion.';
+      notifyListeners();
+      return null;
+    }
+
     final goals = _goalProvider!.goals;
     final today = _goalProvider!.today;
     final inflation = _goalProvider!.globalInflation;
@@ -156,6 +168,7 @@ class NotificationProvider extends ChangeNotifier {
       }
 
       _prependNotification(result.notification);
+      _lastGeneratedAt = DateTime.now();
 
       if (!silent) {
         await _scheduler.showInstant(

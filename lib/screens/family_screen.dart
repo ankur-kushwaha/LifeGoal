@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/family_model.dart';
 import '../providers/goal_provider.dart';
+import 'family_profile_screen.dart';
 
 class FamilyScreen extends StatefulWidget {
   const FamilyScreen({super.key});
@@ -138,6 +139,24 @@ class _FamilyScreenState extends State<FamilyScreen> {
           if (_successMessage != null)
             _buildBanner(_successMessage!, kMoneyGreen),
           _buildFamilyHeader(family, isAdmin, provider),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FamilyProfileScreen()),
+                );
+              },
+              icon: const Icon(Icons.account_balance_wallet_outlined, color: kMoneyGreen),
+              label: const Text('Financial Profile', style: TextStyle(color: kMoneyGreen)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: kMoneyGreen),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
           const SizedBox(height: 24),
           _buildSectionTitle('Members (${members.length})'),
           const SizedBox(height: 8),
