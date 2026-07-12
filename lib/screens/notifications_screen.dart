@@ -24,6 +24,13 @@ class NotificationsScreen extends StatelessWidget {
           if (provider.notifications.isNotEmpty)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.black54),
+              offset: const Offset(0, 48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 4,
+              color: Colors.white,
+              surfaceTintColor: Colors.white,
               onSelected: (value) async {
                 if (value == 'mark_read') {
                   await provider.markAllAsRead();
@@ -36,23 +43,51 @@ class NotificationsScreen extends StatelessWidget {
               },
               itemBuilder: (context) => [
                 if (provider.unreadCount > 0)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'mark_read',
                     child: Row(
                       children: [
-                        Icon(Icons.done_all, size: 20, color: kMoneyGreen),
-                        SizedBox(width: 8),
-                        Text('Mark all read'),
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: kMoneyGreen.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.done_all, size: 18, color: kMoneyGreen),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Mark all read',
+                          style: TextStyle(
+                            color: Color(0xFF1E293B),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'clear_all',
                   child: Row(
                     children: [
-                      Icon(Icons.delete_sweep_outlined, size: 20, color: Colors.redAccent),
-                      SizedBox(width: 8),
-                      Text('Clear all'),
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.delete_sweep_outlined, size: 18, color: Colors.redAccent),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Clear all',
+                        style: TextStyle(
+                          color: Colors.redAccent,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
                     ],
                   ),
                 ),

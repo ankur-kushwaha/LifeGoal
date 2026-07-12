@@ -500,14 +500,45 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Growth Timeline',
-          style: TextStyle(color: kMoneyGreen, fontWeight: FontWeight.bold, fontSize: 15),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'See how your current savings grow over time with no additional investments.',
-          style: TextStyle(color: Colors.black38, fontSize: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Growth Timeline',
+                    style: TextStyle(color: kMoneyGreen, fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'See how your current savings grow over time with no additional investments.',
+                    style: TextStyle(color: Colors.black38, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: () {
+                final provider = Provider.of<GoalProvider>(context, listen: false);
+                _showQuickUpdateSavingsDialog(context, goal, provider);
+              },
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(color: kMoneyGreen.withOpacity(0.3)),
+                ),
+              ),
+              icon: const Icon(Icons.edit_outlined, size: 14, color: kMoneyGreen),
+              label: const Text(
+                'Update Savings',
+                style: TextStyle(color: kMoneyGreen, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         Container(
@@ -544,13 +575,35 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        _currencyFormatter.format(projectedAtMonth),
-                        style: const TextStyle(
-                          color: kMoneyGreen,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            _currencyFormatter.format(projectedAtMonth),
+                            style: const TextStyle(
+                              color: kMoneyGreen,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          if (_timelineMonths == 0) ...[
+                            const SizedBox(width: 6),
+                            InkWell(
+                              onTap: () {
+                                final provider = Provider.of<GoalProvider>(context, listen: false);
+                                _showQuickUpdateSavingsDialog(context, goal, provider);
+                              },
+                              borderRadius: BorderRadius.circular(4),
+                              child: Padding(
+                                padding: const EdgeInsets.all(4.0),
+                                child: Icon(
+                                  Icons.edit_outlined,
+                                  size: 16,
+                                  color: kMoneyGreen.withOpacity(0.8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
@@ -751,6 +804,73 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Goal "${goal.name}" deleted successfully.')),
               );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showQuickUpdateSavingsDialog(BuildContext context, GoalModel goal, GoalProvider provider) {
+    final controller = TextEditingController(text: goal.currentSavings.toStringAsFixed(0));
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: kCardBg,
+        title: const Text('Update Current Savings', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Enter new savings balance for "${goal.name}":', style: const TextStyle(color: Colors.black54, fontSize: 13)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.black87),
+              decoration: InputDecoration(
+                labelText: 'Current Savings (₹)',
+                labelStyle: const TextStyle(color: Colors.black54),
+                fillColor: kScaffoldBg,
+                filled: true,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.black12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: kMoneyGreen),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
+            onPressed: () => Navigator.pop(context),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kMoneyGreen,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Save'),
+            onPressed: () {
+              final val = double.tryParse(controller.text.trim());
+              if (val != null && val >= 0) {
+                final updated = goal.copyWith(currentSavings: val);
+                provider.updateGoal(updated);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Savings balance for "${goal.name}" updated successfully!')),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a valid positive number')),
+                );
+              }
             },
           ),
         ],

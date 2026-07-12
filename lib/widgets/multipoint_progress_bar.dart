@@ -38,29 +38,51 @@ class MultipointProgressBar extends StatelessWidget {
   }
 
   Widget _buildPointLabel({
+    required double stackWidth,
     required String label,
     required double fraction,
     required Color color,
     required bool aboveBar,
   }) {
-    final clampedFraction = fraction.clamp(0.04, 0.96);
-    final alignmentX = (clampedFraction * 2) - 1;
+    final clampedFraction = fraction.clamp(0.0, 1.0);
+    final leftPosition = clampedFraction * stackWidth;
 
-    return Positioned.fill(
-      child: Align(
-        alignment: Alignment(alignmentX, aboveBar ? -1 : 1),
+    return Positioned(
+      left: leftPosition,
+      top: aboveBar ? 0 : null,
+      bottom: aboveBar ? null : 0,
+      child: FractionalTranslation(
+        // Shift left to center the label exactly on the point
+        // Smoothly adjust alignment near the edges to prevent text overflow
+        translation: Offset(
+          clampedFraction < 0.15
+              ? -clampedFraction / 0.3
+              : clampedFraction > 0.85
+                  ? -0.5 - (clampedFraction - 0.85) / 0.3
+                  : -0.5,
+          0.0,
+        ),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.94),
-            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: color.withOpacity(0.15), width: 0.8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 3,
+                offset: const Offset(0, 1),
+              )
+            ],
           ),
           child: Text(
-            label,
+            label.toUpperCase(),
             style: TextStyle(
               color: color,
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
+              fontSize: 7.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
               height: 1.1,
             ),
           ),
@@ -69,128 +91,16 @@ class MultipointProgressBar extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryPanel() {
-    final achievementPct = inflationAdjustedTarget > 0
-        ? (projectedSavings / inflationAdjustedTarget * 100)
-        : 100.0;
-    final gap = projectedSavings - inflationAdjustedTarget;
-    final hasSurplus = gap >= 0;
-    final gapAmount = gap.abs();
 
-    final outcomeText = gapAmount < 1
-        ? 'You will exactly meet your inflated goal on the target date.'
-        : hasSurplus
-            ? 'You will achieve ${achievementPct.toStringAsFixed(0)}% of your inflated goal, with a surplus of ${formatCurrency(gapAmount)}.'
-            : 'You will achieve ${achievementPct.toStringAsFixed(0)}% of your inflated goal, with a shortfall of ${formatCurrency(gapAmount)}.';
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FB),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-      ),
-      child: Text(
-        'Your current savings of ${formatCurrency(currentSavings)}, with ${returnRatePct.toStringAsFixed(0)}% interest, will reach ${formatCurrency(projectedSavings)} on $targetDateLabel. $outcomeText',
-        style: const TextStyle(
-          color: Colors.black54,
-          fontSize: 11,
-          height: 1.45,
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
+    final projectedFraction = _fraction(projectedSavings);
+    final savingsFraction = _fraction(currentSavings);
+    final goalFraction = _fraction(actualTarget);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return SizedBox(
-                    height: 52,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // Top labels: Interest, Inflation
-                        
-                        _buildPointLabel(
-                          label: 'Inflated Goal',
-                          fraction: 1.0,
-                          color: kMoneyGreen,
-                          aboveBar: true,
-                        ),
-                        _buildPointLabel(
-                          label: 'With Interest',
-                          fraction: _fraction(projectedSavings),
-                          color: kMoneyGreen,
-                          aboveBar: true,
-                        ),
-                        // Bar
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top: 16,
-                          height: 20,
-                          child: CustomPaint(
-                            painter: _MultipointProgressPainter(
-                              scaleMax: inflationAdjustedTarget,
-                              currentSavings: currentSavings,
-                              actualTarget: actualTarget,
-                              projectedSavings: projectedSavings,
-                              fillColor: fillColor,
-                            ),
-                            size: Size(constraints.maxWidth, 20),
-                          ),
-                        ),
-                        // Bottom labels: Savings, Goal
-                        _buildPointLabel(
-                          label: 'Savings',
-                          fraction: _fraction(currentSavings),
-                          color: fillColor,
-                          aboveBar: false,
-                        ),
-                        _buildPointLabel(
-                          label: 'Goal',
-                          fraction: _fraction(actualTarget),
-                          color: _originalColor,
-                          aboveBar: false,
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              '${progressPercent.toStringAsFixed(0)}%',
-              style: TextStyle(
-                color: fillColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Text(
-          '${formatCurrency(currentSavings)} saved of ${formatCurrency(inflationAdjustedTarget)}',
-          style: const TextStyle(
-            color: Colors.black87,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 10),
-        _buildSummaryPanel(),
-      ],
     );
   }
 }
@@ -202,8 +112,8 @@ class _MultipointProgressPainter extends CustomPainter {
   final double projectedSavings;
   final Color fillColor;
 
-  static const Color _originalColor = Color(0xFF90A4AE);
-  static const Color _interestColor = Color(0xFF9ADFC8);
+  static const Color _originalColor = Color(0xFF94A3B8); // slate-400
+  static const Color _interestColor = Color(0xFF6EE7B7); // emerald-300
 
   _MultipointProgressPainter({
     required this.scaleMax,
@@ -224,7 +134,7 @@ class _MultipointProgressPainter extends CustomPainter {
     double centerY,
     Color color, {
     bool filled = false,
-    double radius = 5,
+    double radius = 4.0,
   }) {
     final paint = Paint()
       ..color = filled ? color : Colors.white
@@ -243,7 +153,7 @@ class _MultipointProgressPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const barHeight = 6.0;
+    const barHeight = 4.0;
     final barTop = size.height / 2 - barHeight / 2;
     final barWidth = size.width;
     final centerY = barTop + barHeight / 2;
@@ -251,30 +161,30 @@ class _MultipointProgressPainter extends CustomPainter {
     // Track
     final trackRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(0, barTop, barWidth, barHeight),
-      const Radius.circular(3),
+      const Radius.circular(2),
     );
-    canvas.drawRRect(trackRect, Paint()..color = const Color(0xFFE8ECF0));
+    canvas.drawRRect(trackRect, Paint()..color = const Color(0xFFE2E8F0)); // slate-200
 
-    // Inflation zone tint (original → inflation adjusted)
+    // Inflation zone tint (original -> inflation adjusted)
     final originalX = barWidth * _fraction(actualTarget);
     if (actualTarget > 0 && actualTarget < scaleMax) {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromLTWH(originalX, barTop, barWidth - originalX, barHeight),
-          const Radius.circular(3),
+          const Radius.circular(2),
         ),
-        Paint()..color = kMoneyGreen.withValues(alpha: 0.08),
+        Paint()..color = const Color(0xFFCBD5E1).withOpacity(0.3), // slate-300 tint
       );
     }
 
-    // With-interest segment (current savings → projected)
+    // With-interest segment (current savings -> projected)
     final currentX = barWidth * _fraction(currentSavings);
     final projectedX = barWidth * _fraction(projectedSavings);
     if (projectedSavings > currentSavings && projectedX > currentX) {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromLTWH(currentX, barTop, projectedX - currentX, barHeight),
-          const Radius.circular(3),
+          const Radius.circular(2),
         ),
         Paint()..color = _interestColor,
       );
@@ -286,7 +196,7 @@ class _MultipointProgressPainter extends CustomPainter {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromLTWH(0, barTop, fillWidth, barHeight),
-          const Radius.circular(3),
+          const Radius.circular(2),
         ),
         Paint()..color = fillColor,
       );
@@ -296,19 +206,23 @@ class _MultipointProgressPainter extends CustomPainter {
     if (actualTarget > 0 && actualTarget < scaleMax) {
       final x = barWidth * _fraction(actualTarget);
       canvas.drawLine(
-        Offset(x, barTop - 2),
-        Offset(x, barTop + barHeight + 2),
+        Offset(x, barTop - 3),
+        Offset(x, barTop + barHeight + 3),
         Paint()
           ..color = _originalColor
           ..strokeWidth = 1.5,
       );
-      _drawDot(canvas, x, centerY, _originalColor);
+      _drawDot(canvas, x, centerY, _originalColor, radius: 3.5);
+    }
+
+    // Current savings dot
+    if (currentSavings > 0) {
+      _drawDot(canvas, currentX, centerY, fillColor, filled: true, radius: 4.5);
     }
 
     // Projected at target date (with interest)
-    if (projectedSavings > 0) {
-      final x = projectedX;
-      _drawDot(canvas, x, centerY, _interestColor, filled: true);
+    if (projectedSavings > currentSavings && projectedSavings > 0) {
+      _drawDot(canvas, projectedX, centerY, _interestColor, filled: true, radius: 4.5);
     }
 
     // Goal end cap
@@ -316,10 +230,10 @@ class _MultipointProgressPainter extends CustomPainter {
       final x = barWidth;
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromLTWH(x - 3, barTop - 1, 3, barHeight + 2),
+          Rect.fromLTWH(x - 3, barTop - 2, 3, barHeight + 4),
           const Radius.circular(1.5),
         ),
-        Paint()..color = kMoneyGreen,
+        Paint()..color = const Color(0xFF0F172A), // slate-900 end cap
       );
     }
   }
