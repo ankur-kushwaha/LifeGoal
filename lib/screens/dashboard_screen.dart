@@ -16,6 +16,7 @@ import 'notifications_screen.dart';
 import '../app_routes.dart';
 
 enum _SipFilter { all, needsSip, fullyFunded }
+enum _SortOrder { targetDate, requiredSip, health, progress, name }
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -27,6 +28,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   String _selectedAccount = 'All';
   _SipFilter _sipFilter = _SipFilter.all;
+  _SortOrder _sortOrder = _SortOrder.targetDate;
   bool _isSettingsExpanded = false;
 
   final NumberFormat _currencyFormatter = NumberFormat.currency(
@@ -41,8 +43,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final notificationProvider = Provider.of<NotificationProvider>(context);
     final theme = Theme.of(context);
 
-    // Filter goals by family member and SIP status
-    final filteredGoals = _filterGoals(provider);
+    // Filter and sort goals by family member, SIP status and sort parameters
+    final filteredGoals = _filterAndSortGoals(provider);
 
     // Dynamically fetch account list
     final familyMembers = ['All', ...provider.familyMemberLabels];
@@ -610,10 +612,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 12),
-          // Overlapping Avatars stack
-          _buildFamilyAvatarStack(provider),
+          )
         ],
       ),
     );
@@ -1238,25 +1237,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return '$remainingMonths mo left';
   }
 
-  List<GoalModel> _filterGoals(GoalProvider provider) {
+  List<GoalModel> _filterAndSortGoals(GoalProvider provider) {
     var goals = provider.goalsForMember(_selectedAccount);
 
+    // 1. Filter by SIP Status
     switch (_sipFilter) {
       case _SipFilter.needsSip:
-        return goals.where((g) => _goalNeedsSip(g, provider)).toList();
+        goals = goals.where((g) => _goalNeedsSip(g, provider)).toList();
+        break;
       case _SipFilter.fullyFunded:
-        return goals.where((g) => !_goalNeedsSip(g, provider)).toList();
+        goals = goals.where((g) => !_goalNeedsSip(g, provider)).toList();
+        break;
       case _SipFilter.all:
-        return goals;
+        break;
     }
+
+    // 2. Sort goals
+    goals.sort((a, b) {
+      switch (_sortOrder) {
+        case _SortOrder.targetDate:
+          return a.targetDate.compareTo(b.targetDate);
+        case _SortOrder.requiredSip:
+          final sipA = a.getRequiredSIP(provider.today, provider.globalInflation, provider.globalReturn);
+          final sipB = b.getRequiredSIP(provider.today, provider.globalInflation, provider.globalReturn);
+          return sipB.compareTo(sipA); // Descending (highest first)
+        case _SortOrder.health:
+          final healthA = a.getHealth(provider.today, provider.globalInflation, provider.globalReturn).index;
+          final healthB = b.getHealth(provider.today, provider.globalInflation, provider.globalReturn).index;
+          return healthB.compareTo(healthA); // Descending (Behind first)
+        case _SortOrder.progress:
+          final progressA = a.getPercentDone(provider.today, provider.globalInflation, provider.globalReturn);
+          final progressB = b.getPercentDone(provider.today, provider.globalInflation, provider.globalReturn);
+          return progressA.compareTo(progressB); // Ascending (least progress first)
+        case _SortOrder.name:
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      }
+    });
+
+    return goals;
   }
 
-  // Widget: Unified Filter Bar (Family Member + SIP Status Dropdown Pills)
+  // Widget: Unified Filter Bar (Family Member + SIP Status + Sorting Dropdown Pills)
   Widget _buildUnifiedFilterBar(List<String> accounts) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           // Family Member Dropdown Pill
           PopupMenuButton<String>(
@@ -1278,7 +1306,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 return PopupMenuItem<String>(
                   value: acc,
                   child: Text(
-                    acc == 'All' ? 'All Members' : acc,
+                    acc == 'All' ? 'All' : acc,
                     style: const TextStyle(
                       color: Color(0xFF1E293B),
                       fontSize: 14,
@@ -1308,7 +1336,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const Icon(Icons.people_outline, size: 14, color: kMoneyGreen),
                   const SizedBox(width: 6),
                   Text(
-                    _selectedAccount == 'All' ? 'All Members' : _selectedAccount,
+                    _selectedAccount == 'All' ? 'All' : _selectedAccount,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -1395,10 +1423,126 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(width: 6),
                   Text(
                     _sipFilter == _SipFilter.all
-                        ? 'All Status'
+                        ? 'Status'
                         : _sipFilter == _SipFilter.needsSip
                             ? 'Needs SIP'
                             : 'Fully Funded',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.keyboard_arrow_down, size: 14, color: Color(0xFF94A3B8)),
+                ],
+              ),
+            ),
+          ),
+
+          // Sorting Dropdown Pill
+          PopupMenuButton<_SortOrder>(
+            initialValue: _sortOrder,
+            offset: const Offset(0, 36),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            elevation: 4,
+            color: Colors.white,
+            surfaceTintColor: Colors.white,
+            onSelected: (value) {
+              setState(() {
+                _sortOrder = value;
+              });
+            },
+            itemBuilder: (context) {
+              return const [
+                PopupMenuItem<_SortOrder>(
+                  value: _SortOrder.targetDate,
+                  child: Text(
+                    'Sort: Target Date',
+                    style: TextStyle(
+                      color: Color(0xFF1E293B),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                PopupMenuItem<_SortOrder>(
+                  value: _SortOrder.requiredSip,
+                  child: Text(
+                    'Sort: Required SIP',
+                    style: TextStyle(
+                      color: Color(0xFF1E293B),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                PopupMenuItem<_SortOrder>(
+                  value: _SortOrder.health,
+                  child: Text(
+                    'Sort: Health Status',
+                    style: TextStyle(
+                      color: Color(0xFF1E293B),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                PopupMenuItem<_SortOrder>(
+                  value: _SortOrder.progress,
+                  child: Text(
+                    'Sort: Progress %',
+                    style: TextStyle(
+                      color: Color(0xFF1E293B),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                PopupMenuItem<_SortOrder>(
+                  value: _SortOrder.name,
+                  child: Text(
+                    'Sort: Name',
+                    style: TextStyle(
+                      color: Color(0xFF1E293B),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ];
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: kCardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.015),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  )
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.sort_rounded, size: 14, color: kMoneyGreen),
+                  const SizedBox(width: 6),
+                  Text(
+                    _sortOrder == _SortOrder.targetDate
+                        ? 'Target Date'
+                        : _sortOrder == _SortOrder.requiredSip
+                            ? 'Required SIP'
+                            : _sortOrder == _SortOrder.health
+                                ? 'Health'
+                                : _sortOrder == _SortOrder.progress
+                                    ? 'Progress %'
+                                    : 'Name',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -1681,10 +1825,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    const Icon(Icons.analytics_outlined, color: Color(0xFF94A3B8), size: 12),
+                    const Icon(Icons.savings_outlined, color: Color(0xFF94A3B8), size: 12),
                     const SizedBox(width: 4),
-                    Text(
-                      'Assumes ${goal.expectedReturn ?? provider.globalReturn}% return CAGR · ${goal.inflationRate ?? provider.globalInflation}% inflation rate',
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: _currencyFormatter.format(goal.currentSavings),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                          const TextSpan(
+                            text: ' saved of ',
+                            style: TextStyle(
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ),
+                          TextSpan(
+                            text: _currencyFormatter.format(inflationTarget),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
                       style: const TextStyle(
                         color: Color(0xFF94A3B8),
                         fontSize: 9.5,
