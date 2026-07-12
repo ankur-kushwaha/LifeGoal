@@ -1563,7 +1563,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Widget: Goal Card list item
   Widget _buildGoalCard(BuildContext context, GoalModel goal, GoalProvider provider) {
     final double inflationTarget = goal.getInflationAdjustedTarget(provider.globalInflation);
-    final double projectedSavings = goal.getProjectedSavings(provider.today, provider.globalReturn);
     final double reqSip = goal.getRequiredSIP(provider.today, provider.globalInflation, provider.globalReturn);
     final int remainingMonths = goal.getRemainingMonths(provider.today);
     final health = goal.getHealth(provider.today, provider.globalInflation, provider.globalReturn);
