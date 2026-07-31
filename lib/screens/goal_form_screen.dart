@@ -716,7 +716,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                         ? _backCalculateTodayValue(_manualTargetAmount)
                         : _targetCost;
 
-                    final newGoal = GoalModel(
+                    final base = GoalModel(
                       id: widget.goal?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                       name: _name,
                       account: _account,
@@ -726,7 +726,16 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                       currentSavings: _currentSavings,
                       expectedReturn: _expectedReturnToSave(provider.globalReturn),
                       inflationRate: _inflationRateToSave(provider.globalInflation),
+                      savingsHistory: widget.goal?.savingsHistory,
                     );
+                    // Persist balance against the app's current date whenever savings change
+                    // (and on create so the growth chart has a starting point).
+                    final shouldRecordSavings = !isEditMode ||
+                        widget.goal!.currentSavings != _currentSavings ||
+                        widget.goal!.savingsHistory.isEmpty;
+                    final newGoal = shouldRecordSavings
+                        ? base.recordSavings(_currentSavings, DateTime.now())
+                        : base;
 
                     try {
                       if (isEditMode) {

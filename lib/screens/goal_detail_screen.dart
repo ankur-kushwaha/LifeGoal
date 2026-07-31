@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/goal_model.dart';
 import '../providers/goal_provider.dart';
+import '../widgets/growth_chart.dart';
 import 'goal_form_screen.dart';
 
 class GoalDetailScreen extends StatefulWidget {
@@ -20,8 +21,6 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
   double _simulatedInflationOverride = 0.0;
   double _simulatedReturnOverride = 0.0;
   bool _isSimulatorInitialized = false;
-  int _timelineMonths = 0;
-  bool _timelineInitialized = false;
 
   final NumberFormat _currencyFormatter = NumberFormat.currency(
     locale: 'en_IN',
@@ -53,8 +52,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     final double inflationTarget = goal.getInflationAdjustedTarget(provider.globalInflation);
     final double currentSavings = goal.currentSavings;
     final double projectedSavings = goal.getProjectedSavings(provider.today, provider.globalReturn);
-    final double remainingNeeded = goal.getRemainingAmountNeeded(provider.today, provider.globalInflation, provider.globalReturn);
     final double requiredSip = goal.getRequiredSIP(provider.today, provider.globalInflation, provider.globalReturn);
+    final double requiredLumpSum = goal.getRequiredLumpSumToday(provider.today, provider.globalInflation, provider.globalReturn);
     final int remainingMonths = goal.getRemainingMonths(provider.today);
     final double progress = goal.getPercentDone(provider.today, provider.globalInflation, provider.globalReturn);
     final health = goal.getHealth(provider.today, provider.globalInflation, provider.globalReturn);
@@ -66,33 +65,40 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
       _isSimulatorInitialized = true;
     }
 
-    if (!_timelineInitialized) {
-      _timelineMonths = 0;
-      _timelineInitialized = true;
-    }
-    _timelineMonths = _timelineMonths.clamp(0, remainingMonths);
-
     // Goal Health Styling
-    Color healthColor;
-    String healthText;
-    IconData healthIcon;
+    final Color healthColor;
+    final String healthText;
     switch (health) {
       case GoalHealth.onTrack:
-        healthColor = kMoneyGreen;
+        healthColor = const Color(0xFF10B981);
         healthText = 'On Track';
-        healthIcon = Icons.check_circle_outline;
         break;
       case GoalHealth.needsAttention:
-        healthColor = Colors.orangeAccent;
-        healthText = 'Needs Attention';
-        healthIcon = Icons.warning_amber_rounded;
+        healthColor = const Color(0xFFF59E0B);
+        healthText = 'Attention';
         break;
       case GoalHealth.behindSchedule:
-        healthColor = Colors.redAccent;
-        healthText = 'Behind Schedule';
-        healthIcon = Icons.error_outline;
+        healthColor = const Color(0xFFEF4444);
+        healthText = 'Behind';
         break;
     }
+
+    final balanceNeeded = (inflationTarget - currentSavings).clamp(0.0, double.infinity);
+    final savedProgress = inflationTarget > 0
+        ? (currentSavings / inflationTarget).clamp(0.0, 1.0)
+        : 0.0;
+    final memberLabel = provider.resolveMemberLabel(goal.account);
+    final memberColors = [
+      const Color(0xFF3B82F6),
+      const Color(0xFF10B981),
+      const Color(0xFFF59E0B),
+      const Color(0xFFEC4899),
+      const Color(0xFF8B5CF6),
+    ];
+    final memberIndex = provider.familyMembers.indexWhere((m) => m.matchesAccount(goal.account));
+    final memberColor = memberIndex != -1
+        ? memberColors[memberIndex % memberColors.length]
+        : const Color(0xFF64748B);
 
     // Simulator Math
     final simReturnRate = _simulatedReturnOverride / 100.0;
@@ -120,102 +126,82 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     return Scaffold(
       backgroundColor: kScaffoldBg,
       appBar: AppBar(
-        backgroundColor: kCardBg,
-        title: Text(goal.name, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+        backgroundColor: kScaffoldBg,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined, color: Colors.black54),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => GoalFormScreen(goal: goal),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-            onPressed: () => _confirmDelete(context, provider, goal),
-          ),
-        ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header stats block
+            _buildGoalDetailHeader(
+              goal: goal,
+              memberLabel: memberLabel,
+              memberColor: memberColor,
+              remainingMonths: remainingMonths,
+              healthColor: healthColor,
+              healthText: healthText,
+              progressPercent: progress,
+              onEdit: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => GoalFormScreen(goal: goal)),
+                );
+              },
+              onDelete: () => _confirmDelete(context, provider, goal),
+            ),
+            const SizedBox(height: 16),
+            _buildProgressToTargetCard(
+              healthColor: healthColor,
+              savedProgress: savedProgress,
+              currentSavings: currentSavings,
+              inflationTarget: inflationTarget,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildDetailStatCard(
+                    'Balance Needed',
+                    _currencyFormatter.format(balanceNeeded),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildDetailStatCard(
+                    'Monthly SIP',
+                    _currencyFormatter.format(requiredSip),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildDetailStatCard(
+                    'Invest Today',
+                    _currencyFormatter.format(requiredLumpSum),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(20),
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: kCardBg,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.black.withOpacity(0.08)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                    offset: const Offset(0, 2),
-                  )
-                ],
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
-              child: Column(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('REQUIRED INSTALLMENT TODAY', style: TextStyle(color: Colors.black45, fontSize: 10, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 6),
-                          Text(
-                            _currencyFormatter.format(requiredSip),
-                            style: const TextStyle(
-                              color: kMoneyGreen,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: healthColor.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(healthIcon, color: healthColor, size: 12),
-                            const SizedBox(width: 4),
-                            Text(
-                              healthText,
-                              style: TextStyle(color: healthColor, fontWeight: FontWeight.bold, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Divider(color: Colors.black.withOpacity(0.06), height: 1),
-                  const SizedBox(height: 18),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildMiniMetric('Original Goal', _currencyFormatter.format(targetCost)),
-                      _buildMiniMetric('Inflation-Adj Target', _currencyFormatter.format(inflationTarget)),
-                      _buildMiniMetric('Projected Savings', _currencyFormatter.format(projectedSavings)),
-                    ],
-                  ),
+                  _buildMiniMetric('Original Goal', _currencyFormatter.format(targetCost)),
+                  _buildMiniMetric('Inflation-Adj Target', _currencyFormatter.format(inflationTarget)),
+                  _buildMiniMetric('Projected Savings', _currencyFormatter.format(projectedSavings)),
                 ],
               ),
             ),
@@ -228,44 +214,9 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
               globalInflation: provider.globalInflation,
               inflationTarget: inflationTarget,
               remainingMonths: remainingMonths,
+              inflationPct: inflation * 100,
               returnRatePct: globalReturnRate * 100,
-            ),
-            const SizedBox(height: 24),
-
-            // Timeline & Plan parameters
-            const Text(
-              'Timeline Details',
-              style: TextStyle(color: kMoneyGreen, fontWeight: FontWeight.bold, fontSize: 15),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: kCardBg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.black.withOpacity(0.08)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                    offset: const Offset(0, 2),
-                  )
-                ],
-              ),
-              child: Column(
-                children: [
-                  _buildTimelineRow('Goal Start Date', DateFormat('dd-MMM-yyyy').format(goal.startDate)),
-                  Divider(color: Colors.black.withOpacity(0.06), height: 20),
-                  _buildTimelineRow('Target Date', DateFormat('dd-MMM-yyyy').format(goal.targetDate)),
-                  Divider(color: Colors.black.withOpacity(0.06), height: 20),
-                  _buildTimelineRow('Remaining Investment Time', '$remainingMonths months (${(remainingMonths / 12).toStringAsFixed(1)} years)'),
-                  Divider(color: Colors.black.withOpacity(0.06), height: 20),
-                  _buildTimelineRow('Assumed Annual Inflation', '${(inflation * 100).toStringAsFixed(1)}%'),
-                  Divider(color: Colors.black.withOpacity(0.06), height: 20),
-                  _buildTimelineRow('Assumed Rate of Return', '${(globalReturnRate * 100).toStringAsFixed(1)}%'),
-                ],
-              ),
+              healthColor: healthColor,
             ),
             const SizedBox(height: 24),
 
@@ -463,282 +414,571 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     required double globalInflation,
     required double inflationTarget,
     required int remainingMonths,
+    required double inflationPct,
     required double returnRatePct,
+    required Color healthColor,
   }) {
-    if (remainingMonths <= 0) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: kCardBg,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black.withOpacity(0.08)),
-        ),
-        child: const Text(
-          'This goal has reached its target date. No further growth timeline applies.',
-          style: TextStyle(color: Colors.black54, fontSize: 13),
-        ),
-      );
-    }
-
-    final projectedAtMonth = goal.getSavingsAfterMonths(today, globalReturn, _timelineMonths);
-    final timelineDate = GoalModel.dateAfterMonths(today, _timelineMonths);
     final progressPct = inflationTarget > 0
-        ? (projectedAtMonth / inflationTarget * 100).clamp(0.0, 100.0)
+        ? (goal.currentSavings / inflationTarget * 100).clamp(0.0, 100.0)
         : 100.0;
-    final shortfall = (inflationTarget - projectedAtMonth).clamp(0.0, double.infinity);
-    final sipRequired = _timelineMonths == 0
-        ? goal.getRequiredSIP(today, globalInflation, globalReturn)
-        : goal.getRequiredSIPAfterMonths(
-            today,
-            globalInflation,
-            globalReturn,
-            _timelineMonths,
-          );
-    final monthsLeft = remainingMonths - _timelineMonths;
-    final isAtTarget = _timelineMonths >= remainingMonths;
+    final sipRequired = goal.getRequiredSIP(today, globalInflation, globalReturn);
+    final barColor = progressPct >= 100 ? const Color(0xFF10B981) : healthColor;
 
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: kCardBg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Growth Timeline',
+            style: TextStyle(color: kMoneyGreen, fontWeight: FontWeight.w700, fontSize: 16),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            "Snapshot today, projected growth, and the plan's key dates",
+            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildTimelineChip('Started', DateFormat('dd-MMM-yyyy').format(goal.startDate)),
+              _buildTimelineChip('Target Date', DateFormat('dd-MMM-yyyy').format(goal.targetDate)),
+              _buildTimelineChip('Time Left', _formatMonthsLeft(remainingMonths)),
+              _buildTimelineChip('Inflation', '${inflationPct.toStringAsFixed(1)}%'),
+              _buildTimelineChip('Return', '${returnRatePct.toStringAsFixed(1)}%'),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'TODAY',
+                      style: TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _currencyFormatter.format(goal.currentSavings),
+                            style: const TextStyle(
+                              color: kMoneyGreen,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.4,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        InkWell(
+                          onTap: () {
+                            final provider = Provider.of<GoalProvider>(context, listen: false);
+                            _showQuickUpdateSavingsDialog(context, goal, provider);
+                          },
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.edit_outlined,
+                              size: 16,
+                              color: kMoneyGreen.withOpacity(0.85),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text(
+                      'TARGET (INFLATION-ADJUSTED)',
+                      style: TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _currencyFormatter.format(inflationTarget),
+                      style: const TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.4,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progressPct / 100.0,
+              minHeight: 10,
+              backgroundColor: const Color(0xFFE2E8F0),
+              valueColor: AlwaysStoppedAnimation<Color>(barColor),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${progressPct.toStringAsFixed(0)}% funded',
+            style: const TextStyle(
+              color: Color(0xFF94A3B8),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: sipRequired > 0
+                  ? barColor.withOpacity(0.1)
+                  : const Color(0xFFD1FAE5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              sipRequired > 0
+                  ? 'SIP required to close the gap: ${_currencyFormatter.format(sipRequired)} / month for $remainingMonths month${remainingMonths == 1 ? '' : 's'}'
+                  : remainingMonths <= 0
+                      ? 'This goal has reached its target date.'
+                      : 'No monthly SIP needed — savings are on track to fully fund this goal.',
+              style: TextStyle(
+                color: sipRequired > 0 ? barColor : const Color(0xFF065F46),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Growth chart',
+            style: TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Recorded value today, and projected growth at ${returnRatePct.toStringAsFixed(1)}% p.a. with no new SIP.',
+            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          GrowthChart(
+            points: goal.getGrowthChartSeries(today, globalReturn),
+            targetAmount: inflationTarget,
+            today: today,
+            currencyFormatter: _currencyFormatter,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineChip(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '${label.toUpperCase()}  ',
+              style: const TextStyle(
+                color: Color(0xFF94A3B8),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
+            TextSpan(
+              text: value,
+              style: const TextStyle(
+                color: Color(0xFF334155),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatMonthsLeft(int remainingMonths) {
+    if (remainingMonths == 0) return 'Achieved!';
+    if (remainingMonths > 24) {
+      final years = remainingMonths / 12.0;
+      return '${years.toStringAsFixed(years >= 10 ? 0 : 1)} yr left';
+    }
+    return '$remainingMonths mo left';
+  }
+
+  IconData _goalIcon(String goalName) {
+    final name = goalName.toLowerCase();
+    if (name.contains('bali') || name.contains('travel') || name.contains('trip') || name.contains('vacation') || name.contains('flight')) {
+      return Icons.flight_takeoff_rounded;
+    }
+    if (name.contains('home') || name.contains('house') || name.contains('flat') || name.contains('land') || name.contains('loan')) {
+      return Icons.home_rounded;
+    }
+    if (name.contains('emergency') || name.contains('medical') || name.contains('hospital') || name.contains('health') || name.contains('security')) {
+      return Icons.shield_rounded;
+    }
+    if (name.contains('education') || name.contains('school') || name.contains('college') || name.contains('university') || name.contains('study') || name.contains('nursery')) {
+      return Icons.school_rounded;
+    }
+    if (name.contains('wedding') || name.contains('shadi') || name.contains('marriage')) {
+      return Icons.favorite_rounded;
+    }
+    if (name.contains('car') || name.contains('bike') || name.contains('vehicle')) {
+      return Icons.directions_car_rounded;
+    }
+    if (name.contains('retirement') || name.contains('pension')) {
+      return Icons.elderly_rounded;
+    }
+    return Icons.star_rounded;
+  }
+
+  Widget _buildGoalDetailHeader({
+    required GoalModel goal,
+    required String memberLabel,
+    required Color memberColor,
+    required int remainingMonths,
+    required Color healthColor,
+    required String healthText,
+    required double progressPercent,
+    required VoidCallback onEdit,
+    required VoidCallback onDelete,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            SizedBox(
+              width: 52,
+              height: 52,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: CircularProgressIndicator(
+                      value: (progressPercent / 100).clamp(0.0, 1.0),
+                      strokeWidth: 3.5,
+                      backgroundColor: const Color(0xFFE2E8F0),
+                      valueColor: AlwaysStoppedAnimation<Color>(healthColor),
+                    ),
+                  ),
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: healthColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(_goalIcon(goal.name), color: healthColor, size: 18),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Growth Timeline',
-                    style: TextStyle(color: kMoneyGreen, fontWeight: FontWeight.bold, fontSize: 15),
+                  Text(
+                    goal.name,
+                    style: const TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.4,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'See how your current savings grow over time with no additional investments.',
-                    style: TextStyle(color: Colors.black38, fontSize: 12),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: memberColor.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          memberLabel.toUpperCase(),
+                          style: TextStyle(
+                            color: memberColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _formatMonthsLeft(remainingMonths),
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        '•  $healthText',
+                        style: TextStyle(
+                          color: healthColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 8),
-            TextButton.icon(
-              onPressed: () {
-                final provider = Provider.of<GoalProvider>(context, listen: false);
-                _showQuickUpdateSavingsDialog(context, goal, provider);
-              },
-              style: TextButton.styleFrom(
+            OutlinedButton(
+              onPressed: onEdit,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF0F172A),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: BorderSide(color: kMoneyGreen.withOpacity(0.3)),
-                ),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              icon: const Icon(Icons.edit_outlined, size: 14, color: kMoneyGreen),
-              label: const Text(
-                'Update Savings',
-                style: TextStyle(color: kMoneyGreen, fontSize: 12, fontWeight: FontWeight.bold),
+              child: const Text('Edit', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+            ),
+            const SizedBox(width: 6),
+            OutlinedButton(
+              onPressed: onDelete,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFEF4444),
+                side: BorderSide(color: const Color(0xFFEF4444).withOpacity(0.35)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
+              child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: kCardBg,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: kMoneyGreen.withOpacity(0.2)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                spreadRadius: 1,
-                offset: const Offset(0, 2),
-              ),
-            ],
+      ],
+    );
+  }
+
+  Widget _buildProgressToTargetCard({
+    required Color healthColor,
+    required double savedProgress,
+    required double currentSavings,
+    required double inflationTarget,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withOpacity(0.12),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _timelineMonths == 0 ? 'TODAY' : 'PROJECTED SAVINGS',
-                        style: const TextStyle(
-                          color: Colors.black38,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Text(
-                            _currencyFormatter.format(projectedAtMonth),
-                            style: const TextStyle(
-                              color: kMoneyGreen,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'PROGRESS TO TARGET',
+                  style: TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: savedProgress,
+                    minHeight: 8,
+                    backgroundColor: Colors.white.withOpacity(0.12),
+                    valueColor: AlwaysStoppedAnimation<Color>(healthColor),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${_currencyFormatter.format(currentSavings)} ',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                          ),
-                          if (_timelineMonths == 0) ...[
-                            const SizedBox(width: 6),
-                            InkWell(
-                              onTap: () {
-                                final provider = Provider.of<GoalProvider>(context, listen: false);
-                                _showQuickUpdateSavingsDialog(context, goal, provider);
-                              },
-                              borderRadius: BorderRadius.circular(4),
-                              child: Padding(
-                                padding: const EdgeInsets.all(4.0),
-                                child: Icon(
-                                  Icons.edit_outlined,
-                                  size: 16,
-                                  color: kMoneyGreen.withOpacity(0.8),
-                                ),
+                            const TextSpan(
+                              text: 'saved',
+                              style: TextStyle(
+                                color: Color(0xFFCBD5E1),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
-                        ],
-                      ),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const Text(
-                        'ON DATE',
-                        style: TextStyle(
-                          color: Colors.black38,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        DateFormat('dd MMM yyyy').format(timelineDate),
-                        style: const TextStyle(
-                          color: Colors.black87,
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progressPct / 100.0,
-                        minHeight: 8,
-                        backgroundColor: Colors.black12,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          progressPct >= 100 ? kMoneyGreen : Colors.orangeAccent,
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${progressPct.toStringAsFixed(0)}%',
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                    Text(
+                      'of ${_currencyFormatter.format(inflationTarget)}',
+                      style: const TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${progressPct.toStringAsFixed(0)}% of inflation-adjusted target (${_currencyFormatter.format(inflationTarget)})',
-                style: const TextStyle(color: Colors.black45, fontSize: 11),
-              ),
-              if (isAtTarget && shortfall > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Shortfall of ${_currencyFormatter.format(shortfall)} even with no further investing.',
-                    style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
-                  ),
-                )
-              else if (isAtTarget && shortfall == 0)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Your current savings are projected to fully fund this goal.',
-                    style: TextStyle(color: kMoneyGreen, fontSize: 11, fontWeight: FontWeight.w600),
-                  ),
-                )
-              else if (monthsLeft > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    sipRequired > 0
-                        ? 'SIP required to fill gap: ${_currencyFormatter.format(sipRequired)} / month for $monthsLeft month${monthsLeft == 1 ? '' : 's'}'
-                        : 'No monthly SIP needed from this point — savings cover the inflated goal.',
-                    style: TextStyle(
-                      color: sipRequired > 0 ? Colors.orangeAccent : kMoneyGreen,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          SizedBox(
+            width: 72,
+            height: 72,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 64,
+                  height: 64,
+                  child: CircularProgressIndicator(
+                    value: savedProgress,
+                    strokeWidth: 5.5,
+                    backgroundColor: Colors.white.withOpacity(0.1),
+                    valueColor: AlwaysStoppedAnimation<Color>(healthColor),
                   ),
                 ),
-              const SizedBox(height: 16),
-              Divider(color: Colors.black.withOpacity(0.06)),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _timelineMonths == 0
-                        ? 'Today'
-                        : '${_timelineMonths} mo${_timelineMonths == 1 ? '' : 's'} from now',
-                    style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.w600),
+                Text(
+                  '${(savedProgress * 100).round()}%',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
                   ),
-                  Text(
-                    '${returnRatePct.toStringAsFixed(1)}% p.a. · no new SIP',
-                    style: const TextStyle(color: Colors.black38, fontSize: 11),
-                  ),
-                ],
-              ),
-              Slider(
-                value: _timelineMonths.toDouble(),
-                min: 0,
-                max: remainingMonths.toDouble(),
-                divisions: remainingMonths > 1 ? remainingMonths : 1,
-                activeColor: kMoneyGreen,
-                inactiveColor: Colors.black12,
-                label: DateFormat('MMM yyyy').format(timelineDate),
-                onChanged: (val) => setState(() => _timelineMonths = val.round()),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    DateFormat('dd MMM yyyy').format(today),
-                    style: const TextStyle(color: Colors.black38, fontSize: 10),
-                  ),
-                  Text(
-                    DateFormat('dd MMM yyyy').format(goal.targetDate),
-                    style: const TextStyle(color: Colors.black38, fontSize: 10),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailStatCard(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: kCardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              color: Color(0xFF94A3B8),
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.2,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 
@@ -752,16 +992,6 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
           value,
           style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.bold),
         ),
-      ],
-    );
-  }
-
-  Widget _buildTimelineRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: const TextStyle(color: Colors.black54, fontSize: 13)),
-        Text(value, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 13)),
       ],
     );
   }
@@ -822,7 +1052,10 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Enter new savings balance for "${goal.name}":', style: const TextStyle(color: Colors.black54, fontSize: 13)),
+            Text(
+              'Enter savings balance for "${goal.name}" as of ${DateFormat('dd MMM yyyy').format(DateTime.now())}:',
+              style: const TextStyle(color: Colors.black54, fontSize: 13),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
@@ -857,15 +1090,27 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('Save'),
-            onPressed: () {
+            onPressed: () async {
               final val = double.tryParse(controller.text.trim());
               if (val != null && val >= 0) {
-                final updated = goal.copyWith(currentSavings: val);
-                provider.updateGoal(updated);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Savings balance for "${goal.name}" updated successfully!')),
-                );
+                final asOf = DateTime.now();
+                try {
+                  await provider.updateGoalSavings(goal, val);
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Savings for "${goal.name}" saved for ${DateFormat('dd MMM yyyy').format(asOf)}.',
+                      ),
+                    ),
+                  );
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Could not save savings: $e')),
+                  );
+                }
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Please enter a valid positive number')),

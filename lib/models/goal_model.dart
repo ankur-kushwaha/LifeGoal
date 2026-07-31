@@ -1,5 +1,38 @@
 import 'dart:math';
 
+/// A recorded savings balance on a calendar date.
+class SavingsSnapshot {
+  final DateTime date;
+  final double amount;
+
+  const SavingsSnapshot({required this.date, required this.amount});
+
+  Map<String, dynamic> toJson() => {
+        'date': date.toIso8601String(),
+        'amount': amount,
+      };
+
+  factory SavingsSnapshot.fromJson(Map<String, dynamic> json) {
+    return SavingsSnapshot(
+      date: DateTime.parse(json['date'] as String),
+      amount: (json['amount'] as num).toDouble(),
+    );
+  }
+}
+
+/// One point on the growth chart (actual recorded balance or future projection).
+class GrowthChartPoint {
+  final DateTime date;
+  final double amount;
+  final bool isProjected;
+
+  const GrowthChartPoint({
+    required this.date,
+    required this.amount,
+    required this.isProjected,
+  });
+}
+
 class GoalModel {
   final String id;
   final String name;
@@ -10,6 +43,8 @@ class GoalModel {
   final double currentSavings;
   final double? expectedReturn; // custom expected return for this goal (null = use global)
   final double? inflationRate;  // custom inflation rate for this goal (null = use global)
+  /// Dated savings balances. Latest entry should match [currentSavings].
+  final List<SavingsSnapshot> savingsHistory;
 
   GoalModel({
     required this.id,
@@ -21,7 +56,82 @@ class GoalModel {
     required this.currentSavings,
     this.expectedReturn,
     this.inflationRate,
-  });
+    List<SavingsSnapshot>? savingsHistory,
+  }) : savingsHistory = List.unmodifiable(savingsHistory ?? const []);
+
+  static DateTime calendarDay(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  static bool isSameCalendarDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// Updates [currentSavings] and upserts a snapshot for [onDate]'s calendar day.
+  GoalModel recordSavings(double amount, DateTime onDate) {
+    final day = calendarDay(onDate);
+    final updated = List<SavingsSnapshot>.from(savingsHistory);
+    final idx = updated.indexWhere((s) => isSameCalendarDay(s.date, day));
+    final snap = SavingsSnapshot(date: day, amount: amount);
+    if (idx >= 0) {
+      updated[idx] = snap;
+    } else {
+      updated.add(snap);
+    }
+    updated.sort((a, b) => a.date.compareTo(b.date));
+    return copyWith(currentSavings: amount, savingsHistory: updated);
+  }
+
+  /// Historical balances plus month-by-month growth to the target date (no new SIP).
+  List<GrowthChartPoint> getGrowthChartSeries(DateTime today, double globalReturn) {
+    final todayDay = calendarDay(today);
+    final points = <GrowthChartPoint>[];
+
+    final history = List<SavingsSnapshot>.from(savingsHistory)
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    for (final snap in history) {
+      final day = calendarDay(snap.date);
+      points.add(GrowthChartPoint(date: day, amount: snap.amount, isProjected: false));
+    }
+
+    // Ensure the latest planning "today" is represented with the live balance.
+    final hasToday = points.any((p) => isSameCalendarDay(p.date, todayDay));
+    if (hasToday) {
+      final idx = points.indexWhere((p) => isSameCalendarDay(p.date, todayDay));
+      points[idx] = GrowthChartPoint(
+        date: todayDay,
+        amount: currentSavings,
+        isProjected: false,
+      );
+    } else {
+      points.add(GrowthChartPoint(
+        date: todayDay,
+        amount: currentSavings,
+        isProjected: false,
+      ));
+    }
+
+    // Keep actual points chronological; drop duplicate dates preferring the last write.
+    points.sort((a, b) => a.date.compareTo(b.date));
+    final deduped = <GrowthChartPoint>[];
+    for (final p in points) {
+      if (deduped.isNotEmpty && isSameCalendarDay(deduped.last.date, p.date)) {
+        deduped[deduped.length - 1] = p;
+      } else {
+        deduped.add(p);
+      }
+    }
+    points
+      ..clear()
+      ..addAll(deduped);
+
+    final remainingMonths = getRemainingMonths(today);
+    for (var m = 1; m <= remainingMonths; m++) {
+      final date = calendarDay(dateAfterMonths(todayDay, m));
+      final amount = getSavingsAfterMonths(today, globalReturn, m);
+      points.add(GrowthChartPoint(date: date, amount: amount, isProjected: true));
+    }
+
+    return points;
+  }
 
   // Calculate total months between two dates (calendar months)
   static int monthsBetween(DateTime start, DateTime end) {
@@ -93,6 +203,22 @@ class GoalModel {
       globalReturn,
       0,
     );
+  }
+
+  /// One-time amount to invest today so current savings + this lump sum
+  /// grow to the inflation-adjusted target by the target date (no further SIP).
+  double getRequiredLumpSumToday(DateTime today, double globalInflation, double globalReturn) {
+    final target = getInflationAdjustedTarget(globalInflation);
+    final remainingMonths = getRemainingMonths(today);
+    if (remainingMonths <= 0) {
+      final gap = target - currentSavings;
+      return gap < 0 ? 0.0 : gap;
+    }
+
+    final annualRate = getEffectiveReturnRate(globalReturn);
+    final presentValueOfTarget = target / pow(1 + annualRate, remainingMonths / 12.0);
+    final lumpSum = presentValueOfTarget - currentSavings;
+    return lumpSum < 0 ? 0.0 : lumpSum;
   }
 
   // Required monthly SIP if you wait N months (growth only), then start SIP for the rest.
@@ -171,10 +297,19 @@ class GoalModel {
       'currentSavings': currentSavings,
       if (expectedReturn != null) 'expectedReturn': expectedReturn,
       if (inflationRate != null) 'inflationRate': inflationRate,
+      'savingsHistory': savingsHistory.map((s) => s.toJson()).toList(),
     };
   }
 
   factory GoalModel.fromJson(Map<String, dynamic> json) {
+    final historyRaw = json['savingsHistory'];
+    final history = historyRaw is List
+        ? historyRaw
+            .whereType<Map>()
+            .map((e) => SavingsSnapshot.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : <SavingsSnapshot>[];
+
     return GoalModel(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -185,6 +320,7 @@ class GoalModel {
       currentSavings: (json['currentSavings'] as num).toDouble(),
       expectedReturn: json['expectedReturn'] != null ? (json['expectedReturn'] as num).toDouble() : null,
       inflationRate: json['inflationRate'] != null ? (json['inflationRate'] as num).toDouble() : null,
+      savingsHistory: history,
     );
   }
 
@@ -199,6 +335,7 @@ class GoalModel {
     double? currentSavings,
     double? expectedReturn,
     double? inflationRate,
+    List<SavingsSnapshot>? savingsHistory,
   }) {
     return GoalModel(
       id: id ?? this.id,
@@ -210,6 +347,7 @@ class GoalModel {
       currentSavings: currentSavings ?? this.currentSavings,
       expectedReturn: expectedReturn ?? this.expectedReturn,
       inflationRate: inflationRate ?? this.inflationRate,
+      savingsHistory: savingsHistory ?? this.savingsHistory,
     );
   }
 }

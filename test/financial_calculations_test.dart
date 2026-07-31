@@ -59,6 +59,24 @@ void main() {
         0,
       );
       expect(sipFromToday.round(), requiredSip.round());
+
+      // 8. Lump sum today: PV of inflation target minus current savings
+      // 3,750,827 / (1.14)^(26/12) - 1,343,000 ≈ 1,480,795
+      final lumpSum = dreamHome.getRequiredLumpSumToday(today, globalInflation, globalReturn);
+      expect(lumpSum.round(), 1480795);
+
+      // Fully funded when lump sum is invested: projected savings cover target
+      final funded = GoalModel(
+        id: dreamHome.id,
+        name: dreamHome.name,
+        account: dreamHome.account,
+        targetCost: dreamHome.targetCost,
+        startDate: dreamHome.startDate,
+        targetDate: dreamHome.targetDate,
+        currentSavings: dreamHome.currentSavings + lumpSum,
+      );
+      expect(funded.getRemainingAmountNeeded(today, globalInflation, globalReturn), closeTo(0, 1));
+      expect(funded.getRequiredSIP(today, globalInflation, globalReturn), closeTo(0, 1));
     });
 
     test('Bali vacation SIP at today considers projected savings growth', () {
@@ -140,6 +158,76 @@ void main() {
         currentSavings: 5000.0,
       );
       expect(pastGoal.getRemainingMonths(DateTime(2026, 7, 1)), 0);
+    });
+
+    test('recordSavings stores value for current date and upserts same day', () {
+      final goal = GoalModel(
+        id: 'hist',
+        name: 'History',
+        account: 'Ankur',
+        targetCost: 100000.0,
+        startDate: DateTime(2024, 1, 1),
+        targetDate: DateTime(2027, 1, 1),
+        currentSavings: 10000.0,
+      );
+
+      final first = goal.recordSavings(15000.0, DateTime(2026, 7, 1, 10, 30));
+      expect(first.currentSavings, 15000.0);
+      expect(first.savingsHistory.length, 1);
+      expect(first.savingsHistory.first.amount, 15000.0);
+      expect(GoalModel.isSameCalendarDay(first.savingsHistory.first.date, DateTime(2026, 7, 1)), true);
+
+      final sameDay = first.recordSavings(16000.0, DateTime(2026, 7, 1, 22, 0));
+      expect(sameDay.savingsHistory.length, 1);
+      expect(sameDay.currentSavings, 16000.0);
+
+      final nextDay = sameDay.recordSavings(17000.0, DateTime(2026, 8, 1));
+      expect(nextDay.savingsHistory.length, 2);
+      expect(nextDay.savingsHistory.last.amount, 17000.0);
+    });
+
+    test('Growth chart includes history, today, future projection', () {
+      final goal = GoalModel(
+        id: 'chart',
+        name: 'Chart Goal',
+        account: 'Ankur',
+        targetCost: 200000.0,
+        startDate: DateTime(2024, 1, 1),
+        targetDate: DateTime(2026, 12, 1),
+        currentSavings: 50000.0,
+        savingsHistory: [
+          SavingsSnapshot(date: DateTime(2026, 1, 1), amount: 40000.0),
+          SavingsSnapshot(date: DateTime(2026, 7, 1), amount: 50000.0),
+        ],
+      );
+
+      final series = goal.getGrowthChartSeries(today, globalReturn);
+      final actual = series.where((p) => !p.isProjected).toList();
+      final projected = series.where((p) => p.isProjected).toList();
+
+      expect(actual.length, 2);
+      expect(actual.first.amount, 40000.0);
+      expect(actual.last.amount, 50000.0);
+      expect(projected, isNotEmpty);
+      expect(projected.last.amount, closeTo(goal.getProjectedSavings(today, globalReturn), 1));
+      expect(GoalModel.isSameCalendarDay(projected.last.date, DateTime(2026, 12, 1)) ||
+          projected.last.date.isAfter(DateTime(2026, 11, 1)), true);
+    });
+
+    test('Savings history survives JSON round-trip', () {
+      final goal = GoalModel(
+        id: 'json',
+        name: 'JSON',
+        account: 'Ankur',
+        targetCost: 1000,
+        startDate: DateTime(2024, 1, 1),
+        targetDate: DateTime(2027, 1, 1),
+        currentSavings: 500,
+      ).recordSavings(500, DateTime(2026, 7, 1));
+
+      final restored = GoalModel.fromJson(goal.toJson());
+      expect(restored.savingsHistory.length, 1);
+      expect(restored.savingsHistory.first.amount, 500);
     });
   });
 }

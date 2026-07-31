@@ -106,6 +106,10 @@ class GoalProvider extends ChangeNotifier {
     return _goals.fold(0.0, (sum, g) => sum + g.getRequiredSIP(_today, _globalInflation, _globalReturn));
   }
 
+  double get totalRequiredLumpSum {
+    return _goals.fold(0.0, (sum, g) => sum + g.getRequiredLumpSumToday(_today, _globalInflation, _globalReturn));
+  }
+
   double get totalRemainingInvestment {
     return _goals.fold(0.0, (sum, g) => sum + g.getRemainingAmountNeeded(_today, _globalInflation, _globalReturn));
   }
@@ -423,6 +427,16 @@ class GoalProvider extends ChangeNotifier {
       _goals = previous;
       notifyListeners();
       rethrow;
+    }
+  }
+
+  /// Updates savings and records the balance against today's real calendar date.
+  /// Also advances the planning reference date when the update is newer.
+  Future<void> updateGoalSavings(GoalModel goal, double amount) async {
+    final asOf = GoalModel.calendarDay(DateTime.now());
+    await updateGoal(goal.recordSavings(amount, asOf));
+    if (asOf.isAfter(GoalModel.calendarDay(_today))) {
+      await updateSettings(referenceToday: asOf);
     }
   }
 

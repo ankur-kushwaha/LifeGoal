@@ -326,7 +326,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
                         Text(
-                          'Swipe card to edit/delete',
+                          'Tap for details · ··· to edit',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: Colors.black38,
                           ),
@@ -819,271 +819,213 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Widget: Financial Summary Dashboard cards
+  // Widget: Merged financial summary card
   Widget _buildFinancialSummaryGrid(GoalProvider provider) {
     final double requiredSip = provider.totalRequiredSIP;
-
-    double totalTarget = provider.goals.fold(0.0, (sum, g) => sum + g.getInflationAdjustedTarget(provider.globalInflation));
-    double totalSaved = provider.totalWealthInvested;
-    double progressPercent = totalTarget > 0 ? (totalSaved / totalTarget * 100).clamp(0, 100) : 0.0;
+    final double requiredLumpSum = provider.totalRequiredLumpSum;
+    final double totalTarget = provider.goals.fold(
+      0.0,
+      (sum, g) => sum + g.getInflationAdjustedTarget(provider.globalInflation),
+    );
+    final double totalSaved = provider.totalWealthInvested;
+    final double remaining = (totalTarget - totalSaved).clamp(0.0, double.infinity);
+    final double progressPercent = totalTarget > 0 ? (totalSaved / totalTarget * 100).clamp(0, 100) : 0.0;
+    final double shortfallPercent = (100 - progressPercent).clamp(0, 100);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Column(
-        children: [
-          // Premium Fintech Hero Card
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF0F172A).withOpacity(0.12),
-                  blurRadius: 15,
-                  spreadRadius: 1,
-                  offset: const Offset(0, 6),
-                ),
-              ],
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F172A).withOpacity(0.12),
+              blurRadius: 15,
+              spreadRadius: 1,
+              offset: const Offset(0, 6),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.bolt_rounded,
-                                  color: Color(0xFF34D399),
-                                  size: 13,
-                                ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                shape: BoxShape.circle,
                               ),
-                              const SizedBox(width: 6),
-                              const Text(
-                                "REQUIRED MONTHLY SIP TODAY",
+                              child: const Icon(
+                                Icons.bolt_rounded,
+                                color: Color(0xFF34D399),
+                                size: 13,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Flexible(
+                              child: Text(
+                                'REQUIRED MONTHLY SIP TODAY',
                                 style: TextStyle(
                                   color: Color(0xFF94A3B8),
                                   fontSize: 8.5,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 1.0,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: _currencyFormatter.format(requiredSip),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                              const TextSpan(
+                                text: '/mo',
+                                style: TextStyle(
+                                  color: Color(0xFFCBD5E1),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          Text(
-                            _currencyFormatter.format(requiredSip),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 32,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
+                        ),
+                        if (requiredLumpSum > 0) ...[
                           const SizedBox(height: 6),
                           Text(
-                            "Assumes ${provider.globalInflation.toStringAsFixed(1)}% inflation · ${provider.globalReturn.toStringAsFixed(0)}% return rate",
+                            'or ${_formatCompactInr(requiredLumpSum)} today to fully fund',
                             style: const TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF34D399),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                    const SizedBox(width: 16),
-                    // Elegant Progress Ring
-                    _buildOverallProgressRing(provider, progressPercent),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(width: 12),
+                  _buildOverallProgressRing(provider, progressPercent),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: kCardBg,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.015),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Container(height: 1, color: Colors.white.withOpacity(0.08)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildSummaryStat(
+                      label: 'Saved',
+                      value: _formatCompactInr(totalSaved),
+                      subtext: '${progressPercent.toStringAsFixed(0)}% of target',
+                      accent: const Color(0xFF60A5FA),
+                    ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "SAVED",
-                              style: TextStyle(
-                                color: Color(0xFF64748B),
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _currencyFormatter.format(provider.totalWealthInvested),
-                              style: const TextStyle(
-                                color: Color(0xFF0F172A),
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              "${progressPercent.toStringAsFixed(0)}% of target",
-                              style: const TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 36,
-                        height: 36,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            CircularProgressIndicator(
-                              value: progressPercent / 100.0,
-                              strokeWidth: 3.5,
-                              backgroundColor: const Color(0xFFE2E8F0),
-                              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
-                            ),
-                            Text(
-                              "${progressPercent.toStringAsFixed(0)}%",
-                              style: const TextStyle(
-                                color: Color(0xFF3B82F6),
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  Container(
+                    width: 1,
+                    height: 36,
+                    margin: const EdgeInsets.symmetric(horizontal: 12),
+                    color: Colors.white.withOpacity(0.08),
                   ),
+                  Expanded(
+                    child: _buildSummaryStat(
+                      label: 'Remaining',
+                      value: _formatCompactInr(remaining),
+                      subtext: '${shortfallPercent.toStringAsFixed(0)}% shortfall',
+                      accent: const Color(0xFFFBBF24),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+              child: Text(
+                'Assumes ${provider.globalInflation.toStringAsFixed(1)}% inflation · ${provider.globalReturn.toStringAsFixed(0)}% return rate',
+                style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: kCardBg,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.015),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "REMAINING",
-                              style: TextStyle(
-                                color: Color(0xFF64748B),
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _currencyFormatter.format(provider.totalRemainingInvestment),
-                              style: const TextStyle(
-                                color: Color(0xFF0F172A),
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              "${(100 - progressPercent).toStringAsFixed(0)}% shortfall",
-                              style: const TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 36,
-                        height: 36,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            CircularProgressIndicator(
-                              value: (100 - progressPercent) / 100.0,
-                              strokeWidth: 3.5,
-                              backgroundColor: const Color(0xFFE2E8F0),
-                              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
-                            ),
-                            Text(
-                              "${(100 - progressPercent).toStringAsFixed(0)}%",
-                              style: const TextStyle(
-                                color: Color(0xFFF59E0B),
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildSummaryStat({
+    required String label,
+    required String value,
+    required String subtext,
+    required Color accent,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: accent.withOpacity(0.9),
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.6,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.2,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtext,
+          style: const TextStyle(
+            color: Color(0xFF94A3B8),
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1560,308 +1502,273 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  String _formatCompactInr(double value) {
+    final abs = value.abs();
+    if (abs >= 10000000) {
+      return '₹${(value / 10000000).toStringAsFixed(1)}Cr';
+    }
+    if (abs >= 100000) {
+      return '₹${(value / 100000).toStringAsFixed(1)}L';
+    }
+    return _currencyFormatter.format(value);
+  }
+
+  Future<void> _confirmDeleteGoal(BuildContext context, GoalModel goal, GoalProvider provider) async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: kCardBg,
+            title: const Text('Delete Goal', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
+            content: Text(
+              'Are you sure you want to delete "${goal.name}"?',
+              style: const TextStyle(color: Color(0xFF475569)),
+            ),
+            actions: [
+              TextButton(
+                child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+                onPressed: () => Navigator.pop(context, false),
+              ),
+              TextButton(
+                child: const Text('Delete', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                onPressed: () => Navigator.pop(context, true),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed || !context.mounted) return;
+    provider.deleteGoal(goal.id);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Goal "${goal.name}" deleted')),
+    );
+  }
+
   // Widget: Goal Card list item
   Widget _buildGoalCard(BuildContext context, GoalModel goal, GoalProvider provider) {
     final double inflationTarget = goal.getInflationAdjustedTarget(provider.globalInflation);
     final double reqSip = goal.getRequiredSIP(provider.today, provider.globalInflation, provider.globalReturn);
+    final double reqLumpSum = goal.getRequiredLumpSumToday(provider.today, provider.globalInflation, provider.globalReturn);
     final int remainingMonths = goal.getRemainingMonths(provider.today);
     final health = goal.getHealth(provider.today, provider.globalInflation, provider.globalReturn);
+    final progressPercent = goal.getPercentDone(provider.today, provider.globalInflation, provider.globalReturn);
+    final barProgress = inflationTarget > 0
+        ? (goal.currentSavings / inflationTarget).clamp(0.0, 1.0)
+        : 0.0;
 
-    Color healthColor;
-    String healthText;
-    IconData healthIcon;
+    final Color healthColor;
+    final String healthText;
     switch (health) {
       case GoalHealth.onTrack:
         healthColor = const Color(0xFF10B981);
         healthText = 'On Track';
-        healthIcon = Icons.check_circle_rounded;
         break;
       case GoalHealth.needsAttention:
         healthColor = const Color(0xFFF59E0B);
         healthText = 'Attention';
-        healthIcon = Icons.warning_rounded;
         break;
       case GoalHealth.behindSchedule:
         healthColor = const Color(0xFFEF4444);
         healthText = 'Behind';
-        healthIcon = Icons.error_rounded;
         break;
     }
 
-    final progressPercent = goal.getPercentDone(provider.today, provider.globalInflation, provider.globalReturn);
+    final memberLabel = provider.resolveMemberLabel(goal.account);
 
-    final memberColors = [
-      const Color(0xFF3B82F6), // blue
-      const Color(0xFF10B981), // emerald
-      const Color(0xFFF59E0B), // amber
-      const Color(0xFFEC4899), // pink
-      const Color(0xFF8B5CF6), // violet
-    ];
-    final memberIndex = provider.familyMembers.indexWhere((m) => m.matchesAccount(goal.account));
-    final memberColor = memberIndex != -1 ? memberColors[memberIndex % memberColors.length] : const Color(0xFF64748B);
-
-    return Dismissible(
-      key: Key(goal.id),
-      direction: DismissDirection.horizontal,
-      background: Container(
-        color: const Color(0xFF3B82F6).withOpacity(0.1),
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 24),
-        child: const Icon(Icons.edit_rounded, color: Color(0xFF3B82F6), size: 28),
-      ),
-      secondaryBackground: Container(
-        color: const Color(0xFFEF4444).withOpacity(0.1),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 24),
-        child: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 28),
-      ),
-      confirmDismiss: (direction) async {
-        if (direction == DismissDirection.startToEnd) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => GoalFormScreen(goal: goal),
-            ),
-          );
-          return false;
-        } else {
-          return await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  backgroundColor: kCardBg,
-                  title: const Text('Delete Goal', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
-                  content: Text(
-                    'Are you sure you want to delete "${goal.name}"?',
-                    style: const TextStyle(color: Color(0xFF475569)),
-                  ),
-                  actions: [
-                    TextButton(
-                      child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
-                      onPressed: () => Navigator.pop(context, false),
-                    ),
-                    TextButton(
-                      child: const Text('Delete', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
-                      onPressed: () => Navigator.pop(context, true),
-                    ),
-                  ],
-                ),
-              ) ??
-              false;
-        }
-      },
-      onDismissed: (direction) {
-        if (direction == DismissDirection.endToStart) {
-          provider.deleteGoal(goal.id);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Goal "${goal.name}" deleted')),
-          );
-        }
-      },
-      child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => GoalDetailScreen(goalId: goal.id),
-            ),
-          );
-        },
-        onLongPress: () => _showQuickUpdateSavingsDialog(context, goal, provider),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: kCardBg,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.015),
-                blurRadius: 12,
-                spreadRadius: 1,
-                offset: const Offset(0, 4),
-              )
-            ],
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => GoalDetailScreen(goalId: goal.id),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    _buildGoalProgressRing(goal, progressPercent, healthColor),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            goal.name,
-                            style: const TextStyle(
-                              color: Color(0xFF0F172A),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.2,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+        );
+      },
+      onLongPress: () => _showQuickUpdateSavingsDialog(context, goal, provider),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(
+          color: kCardBg,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 8, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildGoalProgressRing(goal, progressPercent, healthColor),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          goal.name,
+                          style: const TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
                           ),
-                          const SizedBox(height: 5),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$memberLabel · ${_formatMonthsLeft(remainingMonths)}',
+                          style: const TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (reqSip > 0) ...[
+                        Text.rich(
+                          TextSpan(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: memberColor.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: memberColor.withOpacity(0.2), width: 0.5),
-                                ),
-                                child: Text(
-                                  provider.resolveMemberLabel(goal.account),
-                                  style: TextStyle(
-                                    color: memberColor,
-                                    fontSize: 8.5,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                _formatMonthsLeft(remainingMonths),
+                              TextSpan(
+                                text: _currencyFormatter.format(reqSip),
                                 style: const TextStyle(
-                                  color: Color(0xFF64748B),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF0F172A),
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.2,
                                 ),
                               ),
-                              // Small visual separator dot represented as a circular widget
-                              Container(
-                                width: 3,
-                                height: 3,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFCBD5E1),
-                                  shape: BoxShape.circle,
+                              const TextSpan(
+                                text: '/mo',
+                                style: TextStyle(
+                                  color: Color(0xFF0F172A),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                              ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(healthIcon, color: healthColor, size: 11),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    healthText,
-                                    style: TextStyle(
-                                      color: healthColor,
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    if (reqSip > 0)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          const Text(
-                            'REQUIRED SIP',
-                            style: TextStyle(
-                              color: Color(0xFF94A3B8),
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
+                        ),
+                        if (reqLumpSum > 0) ...[
+                          const SizedBox(height: 2),
                           Text(
-                            _currencyFormatter.format(reqSip),
+                            'or ${_formatCompactInr(reqLumpSum)} one-time',
                             style: const TextStyle(
-                              color: Color(0xFF0F172A),
-                              fontSize: 17,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          const Text(
-                            '/ month',
-                            style: TextStyle(color: Color(0xFF64748B), fontSize: 8.5, fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFD1FAE5),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFA7F3D0)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '🎉 Fully Funded',
-                              style: TextStyle(
-                                color: Color(0xFF065F46),
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Icon(Icons.savings_outlined, color: Color(0xFF94A3B8), size: 12),
-                    const SizedBox(width: 4),
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: _currencyFormatter.format(goal.currentSavings),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
                               color: Color(0xFF64748B),
-                            ),
-                          ),
-                          const TextSpan(
-                            text: ' saved of ',
-                            style: TextStyle(
-                              color: Color(0xFF94A3B8),
-                            ),
-                          ),
-                          TextSpan(
-                            text: _currencyFormatter.format(inflationTarget),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF64748B),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
+                        const SizedBox(height: 4),
+                        Text(
+                          healthText,
+                          style: TextStyle(
+                            color: healthColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ] else
+                        Text(
+                          'Fully Funded',
+                          style: TextStyle(
+                            color: healthColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    offset: const Offset(0, 36),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    color: kCardBg,
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'edit':
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => GoalFormScreen(goal: goal)),
+                          );
+                          break;
+                        case 'savings':
+                          _showQuickUpdateSavingsDialog(context, goal, provider);
+                          break;
+                        case 'delete':
+                          _confirmDeleteGoal(context, goal, provider);
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(value: 'savings', child: Text('Update savings')),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Delete', style: TextStyle(color: Color(0xFFEF4444))),
                       ),
-                      style: const TextStyle(
-                        color: Color(0xFF94A3B8),
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w500,
+                    ],
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.more_horiz, color: Color(0xFF94A3B8), size: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: barProgress,
+                        minHeight: 8,
+                        backgroundColor: const Color(0xFFE2E8F0),
+                        valueColor: AlwaysStoppedAnimation<Color>(healthColor),
                       ),
                     ),
-                  ],
-                )
-              ],
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '${_formatCompactInr(goal.currentSavings)} of ${_formatCompactInr(inflationTarget)}',
+                    style: const TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -1878,7 +1785,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Enter new savings balance for "${goal.name}":', style: const TextStyle(color: Colors.black54, fontSize: 13)),
+            Text(
+              'Enter savings balance for "${goal.name}" as of ${DateFormat('dd MMM yyyy').format(DateTime.now())}:',
+              style: const TextStyle(color: Colors.black54, fontSize: 13),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
@@ -1913,15 +1823,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('Save'),
-            onPressed: () {
+            onPressed: () async {
               final val = double.tryParse(controller.text.trim());
               if (val != null && val >= 0) {
-                final updated = goal.copyWith(currentSavings: val);
-                provider.updateGoal(updated);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Savings balance for "${goal.name}" updated successfully!')),
-                );
+                final asOf = DateTime.now();
+                try {
+                  await provider.updateGoalSavings(goal, val);
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Savings for "${goal.name}" saved for ${DateFormat('dd MMM yyyy').format(asOf)}.',
+                      ),
+                    ),
+                  );
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Could not save savings: $e')),
+                  );
+                }
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Please enter a valid positive number')),
