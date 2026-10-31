@@ -46,6 +46,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Filter and sort goals by family member, SIP status and sort parameters
     final filteredGoals = _filterAndSortGoals(provider);
 
+    final double filteredTotalSavings = filteredGoals.fold(
+      0.0,
+      (sum, g) => sum + g.currentSavings,
+    );
+    final double filteredTotalTarget = filteredGoals.fold(
+      0.0,
+      (sum, g) => sum + g.getInflationAdjustedTarget(provider.globalInflation),
+    );
+
     // Dynamically fetch account list
     final familyMembers = ['All', ...provider.familyMemberLabels];
 
@@ -317,13 +326,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(
-                          '${_selectedAccount == 'All' ? 'All' : "$_selectedAccount's"} Goals (${filteredGoals.length})',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: Colors.black87,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${_selectedAccount == 'All' ? 'All' : "$_selectedAccount's"} Goals (${filteredGoals.length})',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: Colors.black87,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (filteredGoals.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text.rich(
+                                TextSpan(
+                                  children: [
+                                    const TextSpan(
+                                      text: 'Total Collected: ',
+                                      style: TextStyle(
+                                        color: Color(0xFF64748B),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: _formatCompactInr(filteredTotalSavings),
+                                      style: const TextStyle(
+                                        color: Color(0xFF0F172A),
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: ' of ${_formatCompactInr(filteredTotalTarget)}',
+                                      style: const TextStyle(
+                                        color: Color(0xFF64748B),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         Text(
                           'Tap for details · ··· to edit',
@@ -946,10 +994,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Expanded(
                     child: _buildSummaryStat(
-                      label: 'Saved',
+                      label: 'Collected Till Date',
                       value: _formatCompactInr(totalSaved),
-                      subtext: '${progressPercent.toStringAsFixed(0)}% of target',
-                      accent: const Color(0xFF60A5FA),
+                      subtext: '${progressPercent.toStringAsFixed(0)}% of ${_formatCompactInr(totalTarget)} target',
+                      accent: const Color(0xFF34D399),
                     ),
                   ),
                   Container(
@@ -1600,11 +1648,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 1. Goal Identity Header
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 8, 12),
+              padding: const EdgeInsets.fromLTRB(14, 14, 8, 10),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildGoalProgressRing(goal, progressPercent, healthColor),
                   const SizedBox(width: 12),
@@ -1619,7 +1668,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 goal.name,
                                 style: const TextStyle(
                                   color: Color(0xFF0F172A),
-                                  fontSize: 17,
+                                  fontSize: 16.5,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: -0.2,
                                 ),
@@ -1629,7 +1678,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                               decoration: BoxDecoration(
                                 color: healthColor.withOpacity(0.12),
                                 borderRadius: BorderRadius.circular(6),
@@ -1645,7 +1694,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         Text(
                           '$memberLabel · ${_formatMonthsLeft(remainingMonths)}',
                           style: const TextStyle(
@@ -1658,56 +1707,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (reqSip > 0) ...[
-                        Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: _currencyFormatter.format(reqSip),
-                                style: const TextStyle(
-                                  color: Color(0xFF0F172A),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.2,
-                                ),
-                              ),
-                              const TextSpan(
-                                text: '/mo',
-                                style: TextStyle(
-                                  color: Color(0xFF0F172A),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (reqLumpSum > 0) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            'or ${_formatCompactInr(reqLumpSum)} one-time',
-                            style: const TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ] else
-                        Text(
-                          'Fully Funded',
-                          style: TextStyle(
-                            color: healthColor,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                    ],
                   ),
                   const SizedBox(width: 4),
                   PopupMenuButton<String>(
@@ -1753,32 +1752,216 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
             ),
-            const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+
+            // 2. Saved Till Date & Progress Section
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        value: barProgress,
-                        minHeight: 8,
-                        backgroundColor: const Color(0xFFE2E8F0),
-                        valueColor: AlwaysStoppedAnimation<Color>(healthColor),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.account_balance_wallet_outlined,
+                            size: 13,
+                            color: Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'SAVED TILL DATE',
+                            style: TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _formatCompactInr(goal.currentSavings),
+                            style: const TextStyle(
+                              color: Color(0xFF0F172A),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
+                      Text(
+                        '${(barProgress * 100).toStringAsFixed(0)}% of ${_formatCompactInr(inflationTarget)}',
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    '${_formatCompactInr(goal.currentSavings)} of ${_formatCompactInr(inflationTarget)}',
-                    style: const TextStyle(
-                      color: Color(0xFF64748B),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                  const SizedBox(height: 7),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: LinearProgressIndicator(
+                      value: barProgress,
+                      minHeight: 6,
+                      backgroundColor: const Color(0xFFE2E8F0),
+                      valueColor: AlwaysStoppedAnimation<Color>(healthColor),
                     ),
                   ),
                 ],
+              ),
+            ),
+
+            // 3. Settlement Options (Monthly SIP or One-Time Shot)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFF1F5F9)),
+                ),
+                child: reqSip > 0
+                    ? Row(
+                        children: [
+                          // Option 1: Monthly SIP
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.calendar_month_outlined,
+                                      size: 12,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'MONTHLY SIP',
+                                      style: TextStyle(
+                                        color: Color(0xFF64748B),
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 3),
+                                Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: _currencyFormatter.format(reqSip),
+                                        style: const TextStyle(
+                                          color: Color(0xFF0F172A),
+                                          fontSize: 15.5,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.2,
+                                        ),
+                                      ),
+                                      const TextSpan(
+                                        text: '/mo',
+                                        style: TextStyle(
+                                          color: Color(0xFF64748B),
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Vertical divider
+                          Container(
+                            height: 32,
+                            width: 1,
+                            color: const Color(0xFFE2E8F0),
+                            margin: const EdgeInsets.symmetric(horizontal: 10),
+                          ),
+
+                          // Option 2: One-Time Shot
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.bolt_rounded,
+                                      size: 13,
+                                      color: Color(0xFF00A37B),
+                                    ),
+                                    SizedBox(width: 2),
+                                    Text(
+                                      'ONE-TIME SHOT',
+                                      style: TextStyle(
+                                        color: Color(0xFF00A37B),
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 3),
+                                Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: _formatCompactInr(reqLumpSum),
+                                        style: const TextStyle(
+                                          color: Color(0xFF00A37B),
+                                          fontSize: 15.5,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.2,
+                                        ),
+                                      ),
+                                      const TextSpan(
+                                        text: ' to settle',
+                                        style: TextStyle(
+                                          color: Color(0xFF64748B),
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 16),
+                          SizedBox(width: 6),
+                          Text(
+                            'Goal Settled & Fully Funded! 🎉',
+                            style: TextStyle(
+                              color: Color(0xFF10B981),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
               ),
             ),
           ],

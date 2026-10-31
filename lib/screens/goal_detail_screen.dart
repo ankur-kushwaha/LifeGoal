@@ -797,7 +797,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'PROGRESS TO TARGET',
+                  'COLLECTED TILL DATE',
                   style: TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 10,
@@ -831,7 +831,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                               ),
                             ),
                             const TextSpan(
-                              text: 'saved',
+                              text: 'collected',
                               style: TextStyle(
                                 color: Color(0xFFCBD5E1),
                                 fontSize: 13,
