@@ -186,6 +186,78 @@ void main() {
       expect(nextDay.savingsHistory.last.amount, 17000.0);
     });
 
+    test('recordSavings retains prior planning-day balance when date advances', () {
+      final goal = GoalModel(
+        id: 'retain',
+        name: 'Retain',
+        account: 'Ankur',
+        targetCost: 2000000.0,
+        startDate: DateTime(2024, 10, 4),
+        targetDate: DateTime(2026, 12, 4),
+        currentSavings: 780795.0,
+      );
+
+      final updated = goal.recordSavings(
+        803575.0,
+        DateTime(2026, 8, 4),
+        retainBalanceOn: DateTime(2026, 7, 1),
+      );
+
+      expect(updated.savingsHistory.length, 2);
+      expect(updated.savingsHistory.first.amount, 780795.0);
+      expect(
+        GoalModel.isSameCalendarDay(
+          updated.savingsHistory.first.date,
+          DateTime(2026, 7, 1),
+        ),
+        true,
+      );
+      expect(updated.savingsHistory.last.amount, 803575.0);
+      expect(
+        GoalModel.isSameCalendarDay(
+          updated.savingsHistory.last.date,
+          DateTime(2026, 8, 4),
+        ),
+        true,
+      );
+
+      final series = updated.getGrowthChartSeries(DateTime(2026, 8, 4), globalReturn);
+      final actual = series.where((p) => !p.isProjected).toList();
+      expect(actual.length, 3);
+      expect(actual.first.amount, 0);
+      expect(
+        GoalModel.isSameCalendarDay(actual.first.date, DateTime(2024, 10, 4)),
+        true,
+      );
+      expect(actual[1].amount, 780795.0);
+      expect(actual.last.amount, 803575.0);
+    });
+
+    test('recordSavings does not duplicate retained day when already snapshotted', () {
+      final goal = GoalModel(
+        id: 'retain-existing',
+        name: 'Retain Existing',
+        account: 'Ankur',
+        targetCost: 2000000.0,
+        startDate: DateTime(2024, 10, 4),
+        targetDate: DateTime(2026, 12, 4),
+        currentSavings: 780795.0,
+        savingsHistory: [
+          SavingsSnapshot(date: DateTime(2026, 7, 1), amount: 780795.0),
+        ],
+      );
+
+      final updated = goal.recordSavings(
+        803575.0,
+        DateTime(2026, 8, 4),
+        retainBalanceOn: DateTime(2026, 7, 1),
+      );
+
+      expect(updated.savingsHistory.length, 2);
+      expect(updated.savingsHistory.first.amount, 780795.0);
+      expect(updated.savingsHistory.last.amount, 803575.0);
+    });
+
     test('Growth chart includes history, today, future projection', () {
       final goal = GoalModel(
         id: 'chart',
@@ -205,13 +277,47 @@ void main() {
       final actual = series.where((p) => !p.isProjected).toList();
       final projected = series.where((p) => p.isProjected).toList();
 
-      expect(actual.length, 2);
-      expect(actual.first.amount, 40000.0);
+      expect(actual.length, 3);
+      expect(actual.first.amount, 0);
+      expect(
+        GoalModel.isSameCalendarDay(actual.first.date, DateTime(2024, 1, 1)),
+        true,
+      );
+      expect(actual[1].amount, 40000.0);
       expect(actual.last.amount, 50000.0);
       expect(projected, isNotEmpty);
       expect(projected.last.amount, closeTo(goal.getProjectedSavings(today, globalReturn), 1));
       expect(GoalModel.isSameCalendarDay(projected.last.date, DateTime(2026, 12, 1)) ||
           projected.last.date.isAfter(DateTime(2026, 11, 1)), true);
+    });
+
+    test('Growth chart starts at zero on goal creation date', () {
+      final goal = GoalModel(
+        id: 'origin',
+        name: 'Origin',
+        account: 'Ankur',
+        targetCost: 2000000.0,
+        startDate: DateTime(2023, 10, 4),
+        targetDate: DateTime(2026, 11, 30),
+        currentSavings: 803575.0,
+        savingsHistory: [
+          SavingsSnapshot(date: DateTime(2026, 8, 4), amount: 803575.0),
+        ],
+      );
+
+      final series = goal.getGrowthChartSeries(DateTime(2026, 8, 4), globalReturn);
+      final actual = series.where((p) => !p.isProjected).toList();
+
+      expect(actual.first.amount, 0);
+      expect(
+        GoalModel.isSameCalendarDay(actual.first.date, DateTime(2023, 10, 4)),
+        true,
+      );
+      expect(actual.last.amount, 803575.0);
+      expect(
+        GoalModel.isSameCalendarDay(actual.last.date, DateTime(2026, 8, 4)),
+        true,
+      );
     });
 
     test('Savings history survives JSON round-trip', () {

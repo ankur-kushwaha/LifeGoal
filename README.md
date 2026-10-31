@@ -263,14 +263,21 @@ The Flutter app is the web UI and runs on the **same Firebase project** (`mymaps
 
 ### First-time setup
 
-1. Register Android + Web apps and generate config:
+1. Register Android + Web apps, generate config, and deploy Auth + Firestore rules:
    ```bash
    bash scripts/setup_firebase.sh
    ```
-2. Deploy Auth so hosting domains work for sign-in:
+   That script already runs:
    ```bash
-   npx -y firebase-tools@latest deploy --only auth --project mymaps-b534f
+   npx -y firebase-tools@latest deploy --only auth,firestore --project mymaps-b534f
    ```
+
+### After changing Firestore rules
+
+Goal saves fail with `permission-denied` until updated rules are live. Redeploy rules whenever `firestore.rules` changes (for example after adding goal fields):
+```bash
+npx -y firebase-tools@latest deploy --only firestore --project mymaps-b534f
+```
 
 ### Build and deploy
 

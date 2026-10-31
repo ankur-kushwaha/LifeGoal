@@ -199,8 +199,14 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildMiniMetric('Original Goal', _currencyFormatter.format(targetCost)),
-                  _buildMiniMetric('Inflation-Adj Target', _currencyFormatter.format(inflationTarget)),
+                  _buildMiniMetric(
+                    goal.knowsTargetAmount ? "Est. Today's Cost" : 'Original Goal',
+                    _currencyFormatter.format(targetCost),
+                  ),
+                  _buildMiniMetric(
+                    goal.knowsTargetAmount ? 'Your Target' : 'Inflation-Adj Target',
+                    _currencyFormatter.format(inflationTarget),
+                  ),
                   _buildMiniMetric('Projected Savings', _currencyFormatter.format(projectedSavings)),
                 ],
               ),
@@ -423,6 +429,11 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         : 100.0;
     final sipRequired = goal.getRequiredSIP(today, globalInflation, globalReturn);
     final barColor = progressPct >= 100 ? const Color(0xFF10B981) : healthColor;
+    final chartSeries = goal.getGrowthChartSeries(today, globalReturn);
+    final recordedCount = chartSeries.where((p) => !p.isProjected).length;
+    final recordedLabel = recordedCount > 1
+        ? 'From goal start to today'
+        : 'From goal start';
 
     return Container(
       width: double.infinity,
@@ -522,9 +533,11 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text(
-                      'TARGET (INFLATION-ADJUSTED)',
-                      style: TextStyle(
+                    Text(
+                      goal.knowsTargetAmount
+                          ? 'YOUR TARGET'
+                          : 'TARGET (INFLATION-ADJUSTED)',
+                      style: const TextStyle(
                         color: Color(0xFF94A3B8),
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -604,12 +617,12 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Recorded value today, and projected growth at ${returnRatePct.toStringAsFixed(1)}% p.a. with no new SIP.',
+            '$recordedLabel, and projected growth at ${returnRatePct.toStringAsFixed(1)}% p.a. with no new SIP.',
             style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
           ),
           const SizedBox(height: 12),
           GrowthChart(
-            points: goal.getGrowthChartSeries(today, globalReturn),
+            points: chartSeries,
             targetAmount: inflationTarget,
             today: today,
             currencyFormatter: _currencyFormatter,

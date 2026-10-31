@@ -434,7 +434,9 @@ class GoalProvider extends ChangeNotifier {
   /// Also advances the planning reference date when the update is newer.
   Future<void> updateGoalSavings(GoalModel goal, double amount) async {
     final asOf = GoalModel.calendarDay(DateTime.now());
-    await updateGoal(goal.recordSavings(amount, asOf));
+    await updateGoal(
+      goal.recordSavings(amount, asOf, retainBalanceOn: _today),
+    );
     if (asOf.isAfter(GoalModel.calendarDay(_today))) {
       await updateSettings(referenceToday: asOf);
     }
@@ -460,9 +462,16 @@ class GoalProvider extends ChangeNotifier {
 
     var imported = 0;
     for (final goal in SpreadsheetGoals.all) {
-      final exists = _goals.any((g) => g.id == goal.id);
-      if (exists) {
-        await updateGoal(goal);
+      final existingIndex = _goals.indexWhere((g) => g.id == goal.id);
+      if (existingIndex >= 0) {
+        final existing = _goals[existingIndex];
+        // Refresh spreadsheet fields but keep live savings history intact.
+        await updateGoal(goal.copyWith(
+          currentSavings: existing.currentSavings,
+          savingsHistory: existing.savingsHistory.isNotEmpty
+              ? existing.savingsHistory
+              : goal.savingsHistory,
+        ));
       } else {
         await addGoal(goal);
       }

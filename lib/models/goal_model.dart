@@ -43,6 +43,9 @@ class GoalModel {
   final double currentSavings;
   final double? expectedReturn; // custom expected return for this goal (null = use global)
   final double? inflationRate;  // custom inflation rate for this goal (null = use global)
+  /// True when the user entered the future target amount directly
+  /// (vs today's cost, which we inflate to a future target).
+  final bool knowsTargetAmount;
   /// Dated savings balances. Latest entry should match [currentSavings].
   final List<SavingsSnapshot> savingsHistory;
 
@@ -56,6 +59,7 @@ class GoalModel {
     required this.currentSavings,
     this.expectedReturn,
     this.inflationRate,
+    this.knowsTargetAmount = false,
     List<SavingsSnapshot>? savingsHistory,
   }) : savingsHistory = List.unmodifiable(savingsHistory ?? const []);
 
@@ -65,9 +69,27 @@ class GoalModel {
       a.year == b.year && a.month == b.month && a.day == b.day;
 
   /// Updates [currentSavings] and upserts a snapshot for [onDate]'s calendar day.
-  GoalModel recordSavings(double amount, DateTime onDate) {
+  ///
+  /// When [retainBalanceOn] is before [onDate] and that day has no snapshot yet,
+  /// the previous [currentSavings] is stored there first. This keeps the chart's
+  /// prior starting balance when planning "today" advances (instead of relocating
+  /// the single recorded point).
+  GoalModel recordSavings(
+    double amount,
+    DateTime onDate, {
+    DateTime? retainBalanceOn,
+  }) {
     final day = calendarDay(onDate);
     final updated = List<SavingsSnapshot>.from(savingsHistory);
+
+    if (retainBalanceOn != null) {
+      final retainDay = calendarDay(retainBalanceOn);
+      if (day.isAfter(retainDay) &&
+          !updated.any((s) => isSameCalendarDay(s.date, retainDay))) {
+        updated.add(SavingsSnapshot(date: retainDay, amount: currentSavings));
+      }
+    }
+
     final idx = updated.indexWhere((s) => isSameCalendarDay(s.date, day));
     final snap = SavingsSnapshot(date: day, amount: amount);
     if (idx >= 0) {
@@ -80,41 +102,61 @@ class GoalModel {
   }
 
   /// Historical balances plus month-by-month growth to the target date (no new SIP).
+  ///
+  /// The series always begins at [startDate] with amount 0 (goal creation), then
+  /// recorded balances, then projected growth with no new SIP.
   List<GrowthChartPoint> getGrowthChartSeries(DateTime today, double globalReturn) {
     final todayDay = calendarDay(today);
-    final points = <GrowthChartPoint>[];
+    final startDay = calendarDay(startDate);
+    final points = <GrowthChartPoint>[
+      GrowthChartPoint(date: startDay, amount: 0, isProjected: false),
+    ];
 
     final history = List<SavingsSnapshot>.from(savingsHistory)
       ..sort((a, b) => a.date.compareTo(b.date));
 
     for (final snap in history) {
       final day = calendarDay(snap.date);
+      // Origin is always zero at creation; skip any snapshot on/before start day.
+      if (!day.isAfter(startDay)) continue;
       points.add(GrowthChartPoint(date: day, amount: snap.amount, isProjected: false));
     }
 
     // Ensure the latest planning "today" is represented with the live balance.
-    final hasToday = points.any((p) => isSameCalendarDay(p.date, todayDay));
-    if (hasToday) {
-      final idx = points.indexWhere((p) => isSameCalendarDay(p.date, todayDay));
-      points[idx] = GrowthChartPoint(
-        date: todayDay,
-        amount: currentSavings,
-        isProjected: false,
-      );
-    } else {
-      points.add(GrowthChartPoint(
-        date: todayDay,
-        amount: currentSavings,
-        isProjected: false,
-      ));
+    // Creation day stays at zero even when today equals startDate.
+    if (!isSameCalendarDay(todayDay, startDay)) {
+      final hasToday = points.any((p) => isSameCalendarDay(p.date, todayDay));
+      if (hasToday) {
+        final idx = points.indexWhere((p) => isSameCalendarDay(p.date, todayDay));
+        points[idx] = GrowthChartPoint(
+          date: todayDay,
+          amount: currentSavings,
+          isProjected: false,
+        );
+      } else {
+        points.add(GrowthChartPoint(
+          date: todayDay,
+          amount: currentSavings,
+          isProjected: false,
+        ));
+      }
     }
 
-    // Keep actual points chronological; drop duplicate dates preferring the last write.
+    // Keep actual points chronological; drop duplicate dates preferring the last write,
+    // but never replace the creation-day zero origin.
     points.sort((a, b) => a.date.compareTo(b.date));
     final deduped = <GrowthChartPoint>[];
     for (final p in points) {
       if (deduped.isNotEmpty && isSameCalendarDay(deduped.last.date, p.date)) {
-        deduped[deduped.length - 1] = p;
+        if (isSameCalendarDay(p.date, startDay)) {
+          deduped[deduped.length - 1] = GrowthChartPoint(
+            date: startDay,
+            amount: 0,
+            isProjected: false,
+          );
+        } else {
+          deduped[deduped.length - 1] = p;
+        }
       } else {
         deduped.add(p);
       }
@@ -296,7 +338,9 @@ class GoalModel {
       'targetDate': targetDate.toIso8601String(),
       'currentSavings': currentSavings,
       if (expectedReturn != null) 'expectedReturn': expectedReturn,
-      if (inflationRate != null) 'inflationRate': inflationRate,
+      // Always write so merge:true clears a previous per-goal override.
+      'inflationRate': inflationRate,
+      'knowsTargetAmount': knowsTargetAmount,
       'savingsHistory': savingsHistory.map((s) => s.toJson()).toList(),
     };
   }
@@ -320,6 +364,7 @@ class GoalModel {
       currentSavings: (json['currentSavings'] as num).toDouble(),
       expectedReturn: json['expectedReturn'] != null ? (json['expectedReturn'] as num).toDouble() : null,
       inflationRate: json['inflationRate'] != null ? (json['inflationRate'] as num).toDouble() : null,
+      knowsTargetAmount: json['knowsTargetAmount'] as bool? ?? false,
       savingsHistory: history,
     );
   }
@@ -335,6 +380,7 @@ class GoalModel {
     double? currentSavings,
     double? expectedReturn,
     double? inflationRate,
+    bool? knowsTargetAmount,
     List<SavingsSnapshot>? savingsHistory,
   }) {
     return GoalModel(
@@ -347,6 +393,7 @@ class GoalModel {
       currentSavings: currentSavings ?? this.currentSavings,
       expectedReturn: expectedReturn ?? this.expectedReturn,
       inflationRate: inflationRate ?? this.inflationRate,
+      knowsTargetAmount: knowsTargetAmount ?? this.knowsTargetAmount,
       savingsHistory: savingsHistory ?? this.savingsHistory,
     );
   }

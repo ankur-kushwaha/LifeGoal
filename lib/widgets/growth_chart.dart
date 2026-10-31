@@ -5,7 +5,7 @@ import '../constants.dart';
 import '../models/goal_model.dart';
 
 /// Line chart of recorded savings, future growth with no new SIP, and target.
-class GrowthChart extends StatelessWidget {
+class GrowthChart extends StatefulWidget {
   final List<GrowthChartPoint> points;
   final double targetAmount;
   final DateTime today;
@@ -20,8 +20,81 @@ class GrowthChart extends StatelessWidget {
   });
 
   @override
+  State<GrowthChart> createState() => _GrowthChartState();
+}
+
+class _GrowthChartState extends State<GrowthChart> {
+  static const double _hitRadius = 22;
+
+  GrowthChartPoint? _activePoint;
+  Offset? _activeOffset;
+
+  List<GrowthChartPoint> get _actualPoints =>
+      widget.points.where((p) => !p.isProjected).toList();
+
+  String _compact(double value) {
+    if (value >= 10000000) return '₹${(value / 10000000).toStringAsFixed(1)}Cr';
+    if (value >= 100000) return '₹${(value / 100000).toStringAsFixed(1)}L';
+    return widget.currencyFormatter.format(value);
+  }
+
+  void _setActive(GrowthChartPoint? point, Offset? offset) {
+    if (identical(_activePoint, point) && _activeOffset == offset) return;
+    if (_activePoint != null &&
+        point != null &&
+        GoalModel.isSameCalendarDay(_activePoint!.date, point.date) &&
+        (_activePoint!.amount - point.amount).abs() < 0.01 &&
+        _activeOffset == offset) {
+      return;
+    }
+    setState(() {
+      _activePoint = point;
+      _activeOffset = offset;
+    });
+  }
+
+  void _updateFromLocalPosition(
+    Offset local,
+    Size size, {
+    required bool clearIfMiss,
+  }) {
+    if (size.isEmpty) return;
+
+    final layout = _ChartLayout.from(
+      size: size,
+      points: widget.points,
+      targetAmount: widget.targetAmount,
+      today: widget.today,
+    );
+    if (layout == null) {
+      if (clearIfMiss) _setActive(null, null);
+      return;
+    }
+
+    GrowthChartPoint? best;
+    Offset? bestOffset;
+    var bestDist = _hitRadius;
+
+    for (final point in _actualPoints) {
+      final offset = layout.toOffset(point.date, point.amount);
+      final dist = (offset - local).distance;
+      if (dist <= bestDist) {
+        bestDist = dist;
+        best = point;
+        bestOffset = offset;
+      }
+    }
+
+    if (best != null) {
+      _setActive(best, bestOffset);
+    } else if (clearIfMiss) {
+      _setActive(null, null);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (points.isEmpty) {
+    if (widget.points.isEmpty) {
       return const SizedBox(
         height: 180,
         child: Center(
@@ -36,12 +109,49 @@ class GrowthChart extends StatelessWidget {
         SizedBox(
           height: 200,
           width: double.infinity,
-          child: CustomPaint(
-            painter: _GrowthChartPainter(
-              points: points,
-              targetAmount: targetAmount,
-              today: today,
-            ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final chartSize = Size(constraints.maxWidth, constraints.maxHeight);
+              return MouseRegion(
+                opaque: false,
+                onHover: (event) => _updateFromLocalPosition(
+                  event.localPosition,
+                  chartSize,
+                  clearIfMiss: true,
+                ),
+                onExit: (_) => _setActive(null, null),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) => _updateFromLocalPosition(
+                    details.localPosition,
+                    chartSize,
+                    clearIfMiss: true,
+                  ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      CustomPaint(
+                        size: chartSize,
+                        painter: _GrowthChartPainter(
+                          points: widget.points,
+                          targetAmount: widget.targetAmount,
+                          today: widget.today,
+                          activePoint: _activePoint,
+                        ),
+                      ),
+                      if (_activePoint != null && _activeOffset != null)
+                        _PointTooltip(
+                          point: _activePoint!,
+                          anchor: _activeOffset!,
+                          chartSize: chartSize,
+                          amountLabel: widget.currencyFormatter
+                              .format(_activePoint!.amount),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(height: 10),
@@ -51,17 +161,11 @@ class GrowthChart extends StatelessWidget {
           children: [
             _legendDot(kMoneyGreen, 'Recorded'),
             _legendDash(kMoneyGreen.withOpacity(0.7), 'Projected (no new SIP)'),
-            _legendDash(Colors.orangeAccent, 'Target ${_compact(targetAmount)}'),
+            _legendDash(Colors.orangeAccent, 'Target ${_compact(widget.targetAmount)}'),
           ],
         ),
       ],
     );
-  }
-
-  String _compact(double value) {
-    if (value >= 10000000) return '₹${(value / 10000000).toStringAsFixed(1)}Cr';
-    if (value >= 100000) return '₹${(value / 100000).toStringAsFixed(1)}L';
-    return currencyFormatter.format(value);
   }
 
   Widget _legendDot(Color color, String label) {
@@ -94,6 +198,141 @@ class GrowthChart extends StatelessWidget {
   }
 }
 
+class _PointTooltip extends StatelessWidget {
+  final GrowthChartPoint point;
+  final Offset anchor;
+  final Size chartSize;
+  final String amountLabel;
+
+  const _PointTooltip({
+    required this.point,
+    required this.anchor,
+    required this.chartSize,
+    required this.amountLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const tooltipWidth = 148.0;
+    const tooltipHeight = 52.0;
+    const gap = 12.0;
+
+    var left = anchor.dx - tooltipWidth / 2;
+    left = left.clamp(4.0, math.max(4.0, chartSize.width - tooltipWidth - 4));
+
+    final showAbove = anchor.dy - tooltipHeight - gap >= 4;
+    final top = showAbove
+        ? anchor.dy - tooltipHeight - gap
+        : (anchor.dy + gap).clamp(4.0, chartSize.height - tooltipHeight - 4);
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: tooltipWidth,
+      child: IgnorePointer(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.18),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  DateFormat('dd MMM yyyy').format(point.date),
+                  style: const TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  amountLabel,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChartLayout {
+  static const leftPad = 44.0;
+  static const rightPad = 12.0;
+  static const topPad = 16.0;
+  static const bottomPad = 28.0;
+
+  final double chartWidth;
+  final double chartHeight;
+  final DateTime minDate;
+  final DateTime maxDate;
+  final int dateSpan;
+  final double yMax;
+
+  const _ChartLayout({
+    required this.chartWidth,
+    required this.chartHeight,
+    required this.minDate,
+    required this.maxDate,
+    required this.dateSpan,
+    required this.yMax,
+  });
+
+  static _ChartLayout? from({
+    required Size size,
+    required List<GrowthChartPoint> points,
+    required double targetAmount,
+    required DateTime today,
+  }) {
+    final chartWidth = size.width - leftPad - rightPad;
+    final chartHeight = size.height - topPad - bottomPad;
+    if (chartWidth <= 0 || chartHeight <= 0 || points.isEmpty) return null;
+
+    final minDate = points.first.date;
+    final maxDate = points.last.date.isAfter(today) ? points.last.date : today;
+    final dateSpan = math.max(1, maxDate.difference(minDate).inDays);
+    final maxValue = math.max(
+      targetAmount,
+      points.map((p) => p.amount).fold<double>(0, math.max),
+    );
+    final yMax = maxValue <= 0 ? 1.0 : maxValue * 1.08;
+
+    return _ChartLayout(
+      chartWidth: chartWidth,
+      chartHeight: chartHeight,
+      minDate: minDate,
+      maxDate: maxDate,
+      dateSpan: dateSpan,
+      yMax: yMax,
+    );
+  }
+
+  Offset toOffset(DateTime date, double amount) {
+    final x = leftPad + (date.difference(minDate).inDays / dateSpan) * chartWidth;
+    final y = topPad + chartHeight * (1 - (amount / yMax).clamp(0.0, 1.0));
+    return Offset(x, y);
+  }
+}
+
 class _DashLegendPainter extends CustomPainter {
   final Color color;
   _DashLegendPainter(this.color);
@@ -122,39 +361,33 @@ class _GrowthChartPainter extends CustomPainter {
   final List<GrowthChartPoint> points;
   final double targetAmount;
   final DateTime today;
+  final GrowthChartPoint? activePoint;
 
   _GrowthChartPainter({
     required this.points,
     required this.targetAmount,
     required this.today,
+    this.activePoint,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    const leftPad = 44.0;
-    const rightPad = 12.0;
-    const topPad = 16.0;
-    const bottomPad = 28.0;
-
-    final chartWidth = size.width - leftPad - rightPad;
-    final chartHeight = size.height - topPad - bottomPad;
-    if (chartWidth <= 0 || chartHeight <= 0 || points.isEmpty) return;
-
-    final minDate = points.first.date;
-    final maxDate = points.last.date.isAfter(today) ? points.last.date : today;
-    final dateSpan = math.max(1, maxDate.difference(minDate).inDays);
-
-    final maxValue = math.max(
-      targetAmount,
-      points.map((p) => p.amount).fold<double>(0, math.max),
+    final layout = _ChartLayout.from(
+      size: size,
+      points: points,
+      targetAmount: targetAmount,
+      today: today,
     );
-    final yMax = maxValue <= 0 ? 1.0 : maxValue * 1.08;
+    if (layout == null) return;
 
-    Offset toOffset(DateTime date, double amount) {
-      final x = leftPad + (date.difference(minDate).inDays / dateSpan) * chartWidth;
-      final y = topPad + chartHeight * (1 - (amount / yMax).clamp(0.0, 1.0));
-      return Offset(x, y);
-    }
+    final minDate = layout.minDate;
+    final maxDate = layout.maxDate;
+    final chartWidth = layout.chartWidth;
+    final chartHeight = layout.chartHeight;
+    final leftPad = _ChartLayout.leftPad;
+    final topPad = _ChartLayout.topPad;
+
+    Offset toOffset(DateTime date, double amount) => layout.toOffset(date, amount);
 
     // Grid + axis
     final gridPaint = Paint()
@@ -167,7 +400,7 @@ class _GrowthChartPainter extends CustomPainter {
     for (var i = 0; i <= 3; i++) {
       final y = topPad + chartHeight * (i / 3);
       canvas.drawLine(Offset(leftPad, y), Offset(leftPad + chartWidth, y), gridPaint);
-      final value = yMax * (1 - i / 3);
+      final value = layout.yMax * (1 - i / 3);
       final label = _axisLabel(value);
       final tp = TextPainter(
         text: TextSpan(
@@ -221,7 +454,11 @@ class _GrowthChartPainter extends CustomPainter {
     ];
 
     if (bridge.length >= 2) {
-      final path = Path()..moveTo(toOffset(bridge.first.date, bridge.first.amount).dx, toOffset(bridge.first.date, bridge.first.amount).dy);
+      final path = Path()
+        ..moveTo(
+          toOffset(bridge.first.date, bridge.first.amount).dx,
+          toOffset(bridge.first.date, bridge.first.amount).dy,
+        );
       for (var i = 1; i < bridge.length; i++) {
         final o = toOffset(bridge[i].date, bridge[i].amount);
         path.lineTo(o.dx, o.dy);
@@ -265,8 +502,20 @@ class _GrowthChartPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     for (final p in actual) {
       final o = toOffset(p.date, p.amount);
-      canvas.drawCircle(o, 4.5, ringPaint);
-      canvas.drawCircle(o, 3.2, dotPaint);
+      final isActive = activePoint != null &&
+          GoalModel.isSameCalendarDay(activePoint!.date, p.date) &&
+          (activePoint!.amount - p.amount).abs() < 0.01;
+      if (isActive) {
+        canvas.drawCircle(
+          o,
+          9,
+          Paint()
+            ..color = kMoneyGreen.withOpacity(0.18)
+            ..style = PaintingStyle.fill,
+        );
+      }
+      canvas.drawCircle(o, isActive ? 5.5 : 4.5, ringPaint);
+      canvas.drawCircle(o, isActive ? 4.0 : 3.2, dotPaint);
     }
 
     // Today marker
@@ -280,14 +529,18 @@ class _GrowthChartPainter extends CustomPainter {
     todayPoint ??= actual.isNotEmpty ? actual.last : null;
     if (todayPoint != null) {
       final o = toOffset(todayPoint.date, todayPoint.amount);
-      canvas.drawCircle(
-        o,
-        6,
-        Paint()
-          ..color = kMoneyGreen.withOpacity(0.2)
-          ..style = PaintingStyle.fill,
-      );
-      canvas.drawCircle(o, 3.5, dotPaint);
+      final isActive = activePoint != null &&
+          GoalModel.isSameCalendarDay(activePoint!.date, todayPoint.date);
+      if (!isActive) {
+        canvas.drawCircle(
+          o,
+          6,
+          Paint()
+            ..color = kMoneyGreen.withOpacity(0.2)
+            ..style = PaintingStyle.fill,
+        );
+        canvas.drawCircle(o, 3.5, dotPaint);
+      }
     }
 
     // X labels: start, today, end
@@ -299,7 +552,13 @@ class _GrowthChartPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       )..layout();
       final x = center ? anchorX - tp.width / 2 : anchorX;
-      tp.paint(canvas, Offset(x.clamp(leftPad, size.width - tp.width), topPad + chartHeight + 8));
+      tp.paint(
+        canvas,
+        Offset(
+          x.clamp(leftPad, size.width - tp.width),
+          topPad + chartHeight + 8,
+        ),
+      );
     }
 
     paintDateLabel(minDate, leftPad, center: false);
@@ -347,6 +606,7 @@ class _GrowthChartPainter extends CustomPainter {
   bool shouldRepaint(covariant _GrowthChartPainter oldDelegate) {
     return oldDelegate.points != points ||
         oldDelegate.targetAmount != targetAmount ||
-        oldDelegate.today != today;
+        oldDelegate.today != today ||
+        oldDelegate.activePoint != activePoint;
   }
 }

@@ -58,9 +58,13 @@ String authErrorMessage(Object error) {
 
 class FirebaseAuthService implements BaseAuthService {
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    serverClientId: DefaultFirebaseOptions.googleWebClientId,
-  );
+  // google_sign_in_web requires a clientId meta/constructor arg; web auth uses
+  // Firebase popup instead, so skip constructing the plugin on web.
+  final GoogleSignIn? _googleSignIn = kIsWeb
+      ? null
+      : GoogleSignIn(
+          serverClientId: DefaultFirebaseOptions.googleWebClientId,
+        );
 
   @override
   Stream<String?> get onAuthStateChanged =>
@@ -101,7 +105,7 @@ class FirebaseAuthService implements BaseAuthService {
       return credential.user?.uid;
     }
 
-    final googleUser = await _googleSignIn.signIn();
+    final googleUser = await _googleSignIn!.signIn();
     if (googleUser == null) return null;
 
     final googleAuth = await googleUser.authentication;
@@ -115,9 +119,7 @@ class FirebaseAuthService implements BaseAuthService {
 
   @override
   Future<void> signOut() async {
-    if (!kIsWeb) {
-      await _googleSignIn.signOut();
-    }
+    await _googleSignIn?.signOut();
     await _firebaseAuth.signOut();
   }
 }

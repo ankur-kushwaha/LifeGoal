@@ -50,11 +50,13 @@ service cloud.firestore {
         data.currentSavings is number && data.currentSavings >= 0 &&
         isValidOptionalNumber('expectedReturn') &&
         isValidOptionalNumber('inflationRate') &&
+        (!('knowsTargetAmount' in data) || data.knowsTargetAmount is bool) &&
         isValidSavingsHistory(data) &&
         data.keys().hasOnly([
           'id', 'name', 'account', 'targetCost',
           'startDate', 'targetDate', 'currentSavings',
-          'expectedReturn', 'inflationRate', 'savingsHistory'
+          'expectedReturn', 'inflationRate', 'knowsTargetAmount',
+          'savingsHistory'
         ]);
     }
 

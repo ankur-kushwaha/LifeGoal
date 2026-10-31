@@ -73,7 +73,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     _currentSavings = g?.currentSavings ?? 0.0;
     _goalInflationRate = g?.inflationRate ?? provider.globalInflation;
     _goalReturnRate = g?.expectedReturn ?? provider.globalReturn;
-    _useManualTarget = false;
+    _useManualTarget = g?.knowsTargetAmount ?? false;
 
     final years = GoalModel.monthsBetween(_startDate, _targetDate) / 12.0;
     final rate = _goalInflationRate / 100.0;
@@ -233,6 +233,8 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
       (label: '3 years', years: 3),
       (label: '5 years', years: 5),
       (label: '10 years', years: 10),
+      (label: '20 years', years: 20),
+      (label: '30 years', years: 30),
     ];
 
     return Wrap(
@@ -250,74 +252,40 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   }
 
   Widget _buildManualTargetToggle() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: kCardBg,
+    return Material(
+      color: kCardBg,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.black12),
+        side: const BorderSide(color: Colors.black12),
       ),
-      child: SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        title: const Text(
-          'I already know my target amount',
-          style: TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.w500),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text(
+            'I already know my target amount',
+            style: TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          subtitle: const Text(
+            'Enter the future amount you need — we\'ll estimate today\'s value.',
+            style: TextStyle(color: Colors.black45, fontSize: 11),
+          ),
+          value: _useManualTarget,
+          activeThumbColor: kMoneyGreen,
+          onChanged: (val) {
+            setState(() {
+              _useManualTarget = val;
+              if (val) {
+                // Manual target uses the family default inflation for today's estimate.
+                _goalInflationRate = Provider.of<GoalProvider>(context, listen: false).globalInflation;
+                _syncAmountsFromManualTarget();
+              } else {
+                _syncAmountsFromTodayValue();
+              }
+            });
+          },
         ),
-        subtitle: const Text(
-          'Enter the future amount you need — we\'ll estimate today\'s value.',
-          style: TextStyle(color: Colors.black45, fontSize: 11),
-        ),
-        value: _useManualTarget,
-        activeThumbColor: kMoneyGreen,
-        onChanged: (val) {
-          setState(() {
-            _useManualTarget = val;
-            if (val) {
-              _syncAmountsFromManualTarget();
-            } else {
-              _syncAmountsFromTodayValue();
-            }
-          });
-        },
       ),
-    );
-  }
-
-  Widget _buildReturnSlider(double globalReturn) {
-    final isCustom = (_goalReturnRate - globalReturn).abs() > 0.05;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Expected return for this goal',
-              style: TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.w500),
-            ),
-            Text(
-              '${_goalReturnRate.toStringAsFixed(1)}%',
-              style: const TextStyle(color: kMoneyGreen, fontSize: 13, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        Slider(
-          value: _goalReturnRate,
-          min: 0,
-          max: 30,
-          divisions: 60,
-          activeColor: kMoneyGreen,
-          inactiveColor: Colors.black12,
-          onChanged: (val) => setState(() => _goalReturnRate = val),
-        ),
-        Text(
-          isCustom
-              ? 'Using a custom return for SIP calculations (global default: ${globalReturn.toStringAsFixed(1)}%).'
-              : 'Using the global default return. Slide to override for this goal.',
-          style: const TextStyle(color: Colors.black45, fontSize: 10),
-        ),
-      ],
     );
   }
 
@@ -331,7 +299,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'Inflation rate for this goal',
+              'Expected inflation for this goal',
               style: TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.w500),
             ),
             Text(
@@ -341,34 +309,31 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
           ],
         ),
         Slider(
-          value: _goalInflationRate,
+          value: _goalInflationRate.clamp(0, 15),
           min: 0,
-          max: 20,
-          divisions: 40,
+          max: 15,
+          divisions: 30,
           activeColor: kMoneyGreen,
           inactiveColor: Colors.black12,
           onChanged: (val) {
             setState(() {
               _goalInflationRate = val;
-              if (_useManualTarget) {
-                _syncAmountsFromManualTarget();
-              } else {
-                _syncAmountsFromTodayValue();
-              }
+              _syncAmountsFromTodayValue();
             });
           },
         ),
         Text(
           isCustom
-              ? 'Using a custom rate for this goal (global default: ${globalInflation.toStringAsFixed(1)}%).'
-              : 'Using the global default rate. Slide to override for this goal.',
+              ? 'Using a custom inflation rate to project your target (global default: ${globalInflation.toStringAsFixed(1)}%).'
+              : 'Using the global default inflation. Slide to override for this goal.',
           style: const TextStyle(color: Colors.black45, fontSize: 10),
         ),
       ],
     );
   }
 
-  Widget _buildTargetSummaryCard(double globalInflation, double globalReturn) {
+  Widget _buildTargetSummaryCard(double globalInflation) {
+    final displayInflation = _useManualTarget ? globalInflation : _goalInflationRate;
     final inflatedAmount = _useManualTarget ? _manualTargetAmount : _inflatedTargetAmount();
     final todayValue = _useManualTarget ? _backCalculateTodayValue(_manualTargetAmount) : _targetCost;
     final hasValidInput = inflatedAmount > 0 && _years > 0;
@@ -426,13 +391,13 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
               todayValue: todayValue,
               years: _years,
               inflatedAmount: inflatedAmount,
-              inflationRate: _goalInflationRate,
+              inflationRate: displayInflation,
             ),
           ],
-          const SizedBox(height: 16),
-          _buildInflationSlider(globalInflation),
-          const SizedBox(height: 16),
-          _buildReturnSlider(globalReturn),
+          if (!_useManualTarget) ...[
+            const SizedBox(height: 16),
+            _buildInflationSlider(globalInflation),
+          ],
         ],
       ),
     );
@@ -457,9 +422,9 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Original Goal',
-                  style: TextStyle(color: Colors.black38, fontSize: 9, fontWeight: FontWeight.bold),
+                Text(
+                  _useManualTarget ? "Est. Today's Cost" : 'Original Goal',
+                  style: const TextStyle(color: Colors.black38, fontSize: 9, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -518,6 +483,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   }
 
   double? _inflationRateToSave(double globalInflation) {
+    if (_useManualTarget) return null;
     if ((_goalInflationRate - globalInflation).abs() < 0.05) {
       return null;
     }
@@ -692,7 +658,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                 ],
               ),
 
-              _buildTargetSummaryCard(provider.globalInflation, provider.globalReturn),
+              _buildTargetSummaryCard(provider.globalInflation),
               const SizedBox(height: 24),
 
               SizedBox(
@@ -726,6 +692,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                       currentSavings: _currentSavings,
                       expectedReturn: _expectedReturnToSave(provider.globalReturn),
                       inflationRate: _inflationRateToSave(provider.globalInflation),
+                      knowsTargetAmount: _useManualTarget,
                       savingsHistory: widget.goal?.savingsHistory,
                     );
                     // Persist balance against the app's current date whenever savings change
@@ -733,8 +700,13 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                     final shouldRecordSavings = !isEditMode ||
                         widget.goal!.currentSavings != _currentSavings ||
                         widget.goal!.savingsHistory.isEmpty;
+                    final asOf = DateTime.now();
                     final newGoal = shouldRecordSavings
-                        ? base.recordSavings(_currentSavings, DateTime.now())
+                        ? base.recordSavings(
+                            _currentSavings,
+                            asOf,
+                            retainBalanceOn: provider.today,
+                          )
                         : base;
 
                     try {
@@ -742,6 +714,12 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                         await provider.updateGoal(newGoal);
                       } else {
                         await provider.addGoal(newGoal);
+                      }
+                      if (shouldRecordSavings) {
+                        final asOfDay = GoalModel.calendarDay(asOf);
+                        if (asOfDay.isAfter(GoalModel.calendarDay(provider.today))) {
+                          await provider.updateSettings(referenceToday: asOfDay);
+                        }
                       }
                       if (!context.mounted) return;
                       context.read<NotificationProvider>().triggerEvent(

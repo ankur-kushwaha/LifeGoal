@@ -103,11 +103,8 @@ npx -y firebase-tools@latest apps:sdkconfig WEB "$WEB_APP_ID" --project "$PROJEC
 echo "==> Generating lib/firebase_options.dart..."
 dart run tool/generate_firebase_options.dart
 
-echo "==> Deploying Auth providers (email/password + Google)..."
-npx -y firebase-tools@latest deploy --only auth --project "$PROJECT_ID"
-
-echo "==> Deploying Firestore rules and indexes..."
-npx -y firebase-tools@latest deploy --only firestore --project "$PROJECT_ID"
+echo "==> Deploying Auth providers + Firestore rules/indexes..."
+npx -y firebase-tools@latest deploy --only auth,firestore --project "$PROJECT_ID"
 
 echo ""
 echo "==> SHA-1 fingerprints for Google Sign-In:"
