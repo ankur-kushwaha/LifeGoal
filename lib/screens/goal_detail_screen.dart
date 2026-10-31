@@ -18,9 +18,9 @@ class GoalDetailScreen extends StatefulWidget {
 }
 
 class _GoalDetailScreenState extends State<GoalDetailScreen> {
-  double _simulatedInflationOverride = 0.0;
-  double _simulatedReturnOverride = 0.0;
-  bool _isSimulatorInitialized = false;
+  GoalTimeframe _selectedTimeframe = GoalTimeframe.all;
+  bool _sortNewestFirst = true;
+  bool _filterToChartTimeframe = true;
 
   final NumberFormat _currencyFormatter = NumberFormat.currency(
     locale: 'en_IN',
@@ -58,12 +58,6 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     final double progress = goal.getPercentDone(provider.today, provider.globalInflation, provider.globalReturn);
     final health = goal.getHealth(provider.today, provider.globalInflation, provider.globalReturn);
 
-    // Initialize simulation overrides
-    if (!_isSimulatorInitialized) {
-      _simulatedReturnOverride = goal.expectedReturn ?? provider.globalReturn;
-      _simulatedInflationOverride = goal.inflationRate ?? provider.globalInflation;
-      _isSimulatorInitialized = true;
-    }
 
     // Goal Health Styling
     final Color healthColor;
@@ -100,28 +94,11 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         ? memberColors[memberIndex % memberColors.length]
         : const Color(0xFF64748B);
 
-    // Simulator Math
-    final simReturnRate = _simulatedReturnOverride / 100.0;
-    final simInflationRate = _simulatedInflationOverride / 100.0;
-    
-    // Recalculate target with simulated inflation
-    final years = goal.getYearsFromStartToTarget();
-    final simInflationTarget = targetCost * pow(1 + simInflationRate, years);
-    
-    // Recalculate savings with simulated returns
-    final simProjectedSavings = currentSavings * pow(1 + simReturnRate, remainingMonths / 12.0);
-    final simRemainingNeeded = (simInflationTarget - simProjectedSavings).clamp(0.0, double.infinity);
-    
-    // Recalculate required SIP
-    double simRequiredSip = 0.0;
-    if (remainingMonths > 0 && simRemainingNeeded > 0) {
-      final monthlySimReturn = simReturnRate / 12.0;
-      simRequiredSip = monthlySimReturn > 0
-          ? simRemainingNeeded * monthlySimReturn / (pow(1 + monthlySimReturn, remainingMonths) - 1)
-          : simRemainingNeeded / remainingMonths;
-    }
-
-    final simProgressPct = (simProjectedSavings / simInflationTarget * 100).clamp(0.0, 100.0);
+    final chartSeries = goal.getGrowthChartSeries(
+      provider.today,
+      provider.globalReturn,
+      timeframe: _selectedTimeframe,
+    );
 
     return Scaffold(
       backgroundColor: kScaffoldBg,
@@ -223,188 +200,15 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
               inflationPct: inflation * 100,
               returnRatePct: globalReturnRate * 100,
               healthColor: healthColor,
+              chartSeries: chartSeries,
             ),
             const SizedBox(height: 24),
 
-            // Interactive Simulator Section
-            Row(
-              children: [
-                Icon(Icons.psychology, color: kMoneyGreen, size: 24),
-                const SizedBox(width: 8),
-                Text(
-                  'Scenario Simulator (AI Engine)',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: Colors.black87,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Simulate how changes in inflation or expected return rates affect your required monthly SIP contribution.',
-              style: TextStyle(color: Colors.black38, fontSize: 12),
-            ),
-            const SizedBox(height: 16),
-
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: kCardBg,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kMoneyGreen.withOpacity(0.2)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                    offset: const Offset(0, 2),
-                  )
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // SIMULATOR OUTPUTS
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('SIMULATED REQUIRED SIP', style: TextStyle(color: Colors.black38, fontSize: 9, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            Text(
-                              _currencyFormatter.format(simRequiredSip),
-                              style: const TextStyle(color: kMoneyGreen, fontSize: 20, fontWeight: FontWeight.w800),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('SIMULATED TARGET COST', style: TextStyle(color: Colors.black38, fontSize: 9, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            Text(
-                              _currencyFormatter.format(simInflationTarget),
-                              style: const TextStyle(
-                                color: Colors.black87,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Progress Bar for simulation
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: simProgressPct / 100.0,
-                            minHeight: 8,
-                            backgroundColor: Colors.black12,
-                            valueColor: const AlwaysStoppedAnimation<Color>(kMoneyGreen),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text('${simProgressPct.toStringAsFixed(0)}%', style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Divider(color: Colors.black.withOpacity(0.06)),
-                  const SizedBox(height: 12),
-
-                  // CONTROLS 1: Simulated Inflation Rate
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Simulated Inflation: ${_simulatedInflationOverride.toStringAsFixed(1)}%',
-                        style: const TextStyle(color: Colors.black54, fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _simulatedInflationOverride = goal.inflationRate ?? provider.globalInflation;
-                          });
-                        },
-                        child: const Text('Reset', style: TextStyle(color: kMoneyGreen, fontSize: 12)),
-                      )
-                    ],
-                  ),
-                  Slider(
-                    value: _simulatedInflationOverride,
-                    min: 0,
-                    max: 20,
-                    divisions: 40,
-                    activeColor: kMoneyGreen,
-                    inactiveColor: Colors.black12,
-                    onChanged: (val) {
-                      setState(() {
-                        _simulatedInflationOverride = val;
-                      });
-                    },
-                  ),
-
-                  // CONTROLS 2: Rate of return Slider override
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Simulated Rate of Return: ${_simulatedReturnOverride.toStringAsFixed(1)}%',
-                        style: const TextStyle(color: Colors.black54, fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _simulatedReturnOverride = goal.expectedReturn ?? provider.globalReturn;
-                          });
-                        },
-                        child: const Text('Reset', style: TextStyle(color: kMoneyGreen, fontSize: 12)),
-                      )
-                    ],
-                  ),
-                  Slider(
-                    value: _simulatedReturnOverride,
-                    min: 0,
-                    max: 30,
-                    divisions: 60,
-                    activeColor: kMoneyGreen,
-                    inactiveColor: Colors.black12,
-                    onChanged: (val) {
-                      setState(() {
-                        _simulatedReturnOverride = val;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Scenario analysis recommendations
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: kScaffoldBg,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _getSimulationRecommendation(requiredSip, simRequiredSip, _simulatedInflationOverride, _simulatedReturnOverride),
-                      style: const TextStyle(color: Colors.black54, fontSize: 11, fontStyle: FontStyle.italic),
-                    ),
-                  ),
-                ],
-              ),
+            _buildInvestmentChangesCard(
+              context: context,
+              goal: goal,
+              provider: provider,
+              chartSeries: chartSeries,
             ),
             const SizedBox(height: 32),
           ],
@@ -423,13 +227,13 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     required double inflationPct,
     required double returnRatePct,
     required Color healthColor,
+    required List<GrowthChartPoint> chartSeries,
   }) {
     final progressPct = inflationTarget > 0
         ? (goal.currentSavings / inflationTarget * 100).clamp(0.0, 100.0)
         : 100.0;
     final sipRequired = goal.getRequiredSIP(today, globalInflation, globalReturn);
     final barColor = progressPct >= 100 ? const Color(0xFF10B981) : healthColor;
-    final chartSeries = goal.getGrowthChartSeries(today, globalReturn);
     final recordedCount = chartSeries.where((p) => !p.isProjected).length;
     final recordedLabel = recordedCount > 1
         ? 'From goal start to today'
@@ -607,18 +411,88 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'Growth chart',
-            style: TextStyle(
-              color: Color(0xFF0F172A),
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '$recordedLabel, and projected growth at ${returnRatePct.toStringAsFixed(1)}% p.a. with no new SIP.',
-            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 520;
+              final String chartSubtitle;
+              if (_selectedTimeframe == GoalTimeframe.all) {
+                chartSubtitle = '$recordedLabel, and projected growth at ${returnRatePct.toStringAsFixed(1)}% p.a. with no new SIP.';
+              } else {
+                final startAmount = chartSeries.isNotEmpty ? chartSeries.first.amount : 0.0;
+                final endAmount = chartSeries.isNotEmpty ? chartSeries.last.amount : 0.0;
+                final diff = endAmount - startAmount;
+                final diffStr = _currencyFormatter.format(diff.abs());
+                final periodLabel = _selectedTimeframe == GoalTimeframe.oneMonth
+                    ? 'past 1 month'
+                    : _selectedTimeframe == GoalTimeframe.threeMonths
+                        ? 'past 3 months'
+                        : _selectedTimeframe == GoalTimeframe.sixMonths
+                            ? 'past 6 months'
+                            : 'past 1 year';
+                if (diff > 0.5) {
+                  final pct = startAmount > 0 ? ' (+${(diff / startAmount * 100).toStringAsFixed(1)}%)' : '';
+                  chartSubtitle = 'Recorded savings grew by +$diffStr$pct over $periodLabel.';
+                } else if (diff < -0.5) {
+                  final pct = startAmount > 0 ? ' (-${(diff.abs() / startAmount * 100).toStringAsFixed(1)}%)' : '';
+                  chartSubtitle = 'Recorded savings changed by -$diffStr$pct over $periodLabel.';
+                } else {
+                  chartSubtitle = 'Recorded savings balance remained at ${_currencyFormatter.format(endAmount)} over $periodLabel.';
+                }
+              }
+
+              final timeframeSelector = _buildTimeframeSelector();
+
+              if (isWide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Growth chart',
+                            style: TextStyle(
+                              color: Color(0xFF0F172A),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            chartSubtitle,
+                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    timeframeSelector,
+                  ],
+                );
+              } else {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Growth chart',
+                      style: TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      chartSubtitle,
+                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                    ),
+                    const SizedBox(height: 10),
+                    timeframeSelector,
+                  ],
+                );
+              }
+            },
           ),
           const SizedBox(height: 12),
           GrowthChart(
@@ -628,6 +502,62 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
             currencyFormatter: _currencyFormatter,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTimeframeSelector() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.all(3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: GoalTimeframe.values.map((tf) {
+          final isSelected = _selectedTimeframe == tf;
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                if (_selectedTimeframe != tf) {
+                  setState(() {
+                    _selectedTimeframe = tf;
+                  });
+                }
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Text(
+                  tf.label,
+                  style: TextStyle(
+                    color: isSelected ? kMoneyGreen : const Color(0xFF64748B),
+                    fontSize: 11,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -1009,21 +939,1142 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     );
   }
 
-  // AI-like recommendation text generator based on simulation parameters
-  String _getSimulationRecommendation(
-    double originalRequiredSip,
-    double simulatedRequiredSip,
-    double simulatedInflation,
-    double simulatedReturn,
-  ) {
-    final diff = simulatedRequiredSip - originalRequiredSip;
-    if (diff.round() == 0) {
-      return "💡 Adjust the sliders to see how changes in inflation and return rates affect your required monthly SIP.";
-    } else if (diff < 0) {
-      return "🎉 Positive scenario! Under this simulation, your required monthly installment decreases by ${_currencyFormatter.format(-diff)} due to lower inflation / higher return assumptions.";
-    } else {
-      return "⚠ Warning: Under this simulation, you will need to invest an additional ${_currencyFormatter.format(diff)} per month to achieve your goal on time.";
+  Widget _buildInvestmentChangesCard({
+    required BuildContext context,
+    required GoalModel goal,
+    required GoalProvider provider,
+    required List<GrowthChartPoint> chartSeries,
+  }) {
+    // Retrieve all recorded points across all time for accurate delta calculations
+    final allActualPoints = goal
+        .getGrowthChartSeries(
+          provider.today,
+          provider.globalReturn,
+          timeframe: GoalTimeframe.all,
+        )
+        .where((p) => !p.isProjected)
+        .toList();
+
+    final List<_InvestmentEntry> allEntries = [];
+    for (int i = 0; i < allActualPoints.length; i++) {
+      final point = allActualPoints[i];
+      final double? prevAmount = i > 0 ? allActualPoints[i - 1].amount : null;
+      final double diff = prevAmount != null ? (point.amount - prevAmount) : 0.0;
+      final double? pct = (prevAmount != null && prevAmount > 0)
+          ? (diff / prevAmount * 100)
+          : null;
+      final isStart = GoalModel.isSameCalendarDay(point.date, goal.startDate);
+      final isToday = GoalModel.isSameCalendarDay(point.date, provider.today);
+      final snapIdx = goal.savingsHistory.indexWhere(
+        (s) => GoalModel.isSameCalendarDay(s.date, point.date),
+      );
+      final snap = snapIdx >= 0 ? goal.savingsHistory[snapIdx] : null;
+
+      allEntries.add(
+        _InvestmentEntry(
+          date: point.date,
+          amount: point.amount,
+          previousAmount: prevAmount,
+          diff: diff,
+          percentChange: pct,
+          isStartDate: isStart,
+          isToday: isToday,
+          snapshot: snap,
+        ),
+      );
     }
+
+    final chartRecorded = chartSeries.where((p) => !p.isProjected).toList();
+    final List<_InvestmentEntry> displayEntries;
+    if (_filterToChartTimeframe && _selectedTimeframe != GoalTimeframe.all) {
+      displayEntries = allEntries.where((e) {
+        return chartRecorded.any((cp) => GoalModel.isSameCalendarDay(cp.date, e.date));
+      }).toList();
+    } else {
+      displayEntries = List<_InvestmentEntry>.from(allEntries);
+    }
+
+    if (_sortNewestFirst) {
+      displayEntries.sort((a, b) => b.date.compareTo(a.date));
+    } else {
+      displayEntries.sort((a, b) => a.date.compareTo(b.date));
+    }
+
+    // Calculate net growth for the visible period
+    double? netGrowth;
+    double? netGrowthPct;
+    if (displayEntries.isNotEmpty) {
+      final chronological = List<_InvestmentEntry>.from(displayEntries)
+        ..sort((a, b) => a.date.compareTo(b.date));
+      final firstVal = chronological.first.amount;
+      final lastVal = chronological.last.amount;
+      netGrowth = lastVal - firstVal;
+      if (firstVal > 0) {
+        netGrowthPct = (netGrowth / firstVal) * 100;
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: kCardBg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.table_chart_rounded,
+                          color: kMoneyGreen,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Investment Changes',
+                          style: TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _selectedTimeframe != GoalTimeframe.all && _filterToChartTimeframe
+                          ? 'Showing ${displayEntries.length} recorded change${displayEntries.length == 1 ? '' : 's'} in chart timeframe (${_selectedTimeframe.label})'
+                          : 'Showing all ${displayEntries.length} recorded balance changes from goal start to today',
+                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () => _showRecordInvestmentDialog(context, goal, provider),
+                icon: const Icon(Icons.add_rounded, size: 16, color: kMoneyGreen),
+                label: const Text(
+                  'Record Change',
+                  style: TextStyle(
+                    color: kMoneyGreen,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: kMoneyGreen.withOpacity(0.06),
+                  side: BorderSide(color: kMoneyGreen.withOpacity(0.35)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Filters and Sort Control Bar
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (_selectedTimeframe != GoalTimeframe.all)
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.all(2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildFilterToggleTab(
+                        label: 'Chart (${_selectedTimeframe.label})',
+                        isSelected: _filterToChartTimeframe,
+                        onTap: () {
+                          if (!_filterToChartTimeframe) {
+                            setState(() => _filterToChartTimeframe = true);
+                          }
+                        },
+                      ),
+                      _buildFilterToggleTab(
+                        label: 'All (${allEntries.length})',
+                        isSelected: !_filterToChartTimeframe,
+                        onTap: () {
+                          if (_filterToChartTimeframe) {
+                            setState(() => _filterToChartTimeframe = false);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    '${displayEntries.length} record${displayEntries.length == 1 ? '' : 's'}',
+                    style: const TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+
+              // Sort button
+              InkWell(
+                onTap: () => setState(() => _sortNewestFirst = !_sortNewestFirst),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _sortNewestFirst
+                            ? Icons.arrow_downward_rounded
+                            : Icons.arrow_upward_rounded,
+                        size: 13,
+                        color: const Color(0xFF475569),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _sortNewestFirst ? 'Newest first' : 'Oldest first',
+                        style: const TextStyle(
+                          color: Color(0xFF475569),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Main Table / Card Content
+          if (displayEntries.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.history_rounded,
+                    color: Color(0xFF94A3B8),
+                    size: 32,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'No recorded investment changes in this timeframe.',
+                    style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  if (_filterToChartTimeframe && _selectedTimeframe != GoalTimeframe.all)
+                    TextButton(
+                      onPressed: () => setState(() => _filterToChartTimeframe = false),
+                      child: const Text('View All Records', style: TextStyle(color: kMoneyGreen)),
+                    ),
+                ],
+              ),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 520;
+                if (isWide) {
+                  return _buildWideInvestmentTable(
+                    context: context,
+                    goal: goal,
+                    provider: provider,
+                    entries: displayEntries,
+                  );
+                } else {
+                  return _buildNarrowInvestmentList(
+                    context: context,
+                    goal: goal,
+                    provider: provider,
+                    entries: displayEntries,
+                  );
+                }
+              },
+            ),
+
+          // Period Summary Footer
+          if (displayEntries.length > 1 && netGrowth != null) ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Period Net Growth',
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Icon(
+                        netGrowth >= 0
+                            ? Icons.trending_up_rounded
+                            : Icons.trending_down_rounded,
+                        size: 16,
+                        color: netGrowth >= 0
+                            ? const Color(0xFF059669)
+                            : const Color(0xFFDC2626),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${netGrowth >= 0 ? '+' : '-'}${_currencyFormatter.format(netGrowth.abs())}${netGrowthPct != null ? ' (${netGrowth >= 0 ? '+' : ''}${netGrowthPct.toStringAsFixed(1)}%)' : ''}',
+                        style: TextStyle(
+                          color: netGrowth >= 0
+                              ? const Color(0xFF059669)
+                              : const Color(0xFFDC2626),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterToggleTab({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? kMoneyGreen : const Color(0xFF64748B),
+              fontSize: 11,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWideInvestmentTable({
+    required BuildContext context,
+    required GoalModel goal,
+    required GoalProvider provider,
+    required List<_InvestmentEntry> entries,
+  }) {
+    const headerStyle = TextStyle(
+      color: Color(0xFF94A3B8),
+      fontSize: 10,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.5,
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFF1F5F9)),
+      ),
+      child: Column(
+        children: [
+          // Table Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
+            ),
+            child: const Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Text('DATE', style: headerStyle),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    'RECORDED BALANCE',
+                    textAlign: TextAlign.right,
+                    style: headerStyle,
+                  ),
+                ),
+                Expanded(
+                  flex: 4,
+                  child: Text(
+                    'INVESTMENT CHANGE',
+                    textAlign: TextAlign.right,
+                    style: headerStyle,
+                  ),
+                ),
+                SizedBox(
+                  width: 80,
+                  child: Text(
+                    'ACTIONS',
+                    textAlign: TextAlign.center,
+                    style: headerStyle,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Table Rows
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: entries.length,
+            separatorBuilder: (_, _) => const Divider(
+              height: 1,
+              thickness: 1,
+              color: Color(0xFFF1F5F9),
+            ),
+            itemBuilder: (context, index) {
+              final entry = entries[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Row(
+                  children: [
+                    // Date & Badges
+                    Expanded(
+                      flex: 3,
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        runSpacing: 2,
+                        children: [
+                          Text(
+                            DateFormat('dd-MMM-yyyy').format(entry.date),
+                            style: const TextStyle(
+                              color: Color(0xFF1E293B),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (entry.isToday)
+                            _buildMiniBadge('Today', const Color(0xFFECFDF5), const Color(0xFF059669))
+                          else if (entry.isStartDate)
+                            _buildMiniBadge('Start', const Color(0xFFF1F5F9), const Color(0xFF64748B)),
+                        ],
+                      ),
+                    ),
+
+                    // Recorded Balance
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        _currencyFormatter.format(entry.amount),
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+
+                    // Investment Change
+                    Expanded(
+                      flex: 4,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: _buildChangePill(entry),
+                      ),
+                    ),
+
+                    // Actions
+                    SizedBox(
+                      width: 80,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          InkWell(
+                            onTap: () => _showEditInvestmentDialog(context, goal, provider, entry),
+                            borderRadius: BorderRadius.circular(6),
+                            child: const Padding(
+                              padding: EdgeInsets.all(6),
+                              child: Icon(Icons.edit_outlined, size: 16, color: Color(0xFF64748B)),
+                            ),
+                          ),
+                          if (entry.snapshot != null)
+                            InkWell(
+                              onTap: () => _showDeleteInvestmentDialog(context, goal, provider, entry),
+                              borderRadius: BorderRadius.circular(6),
+                              child: const Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Icon(Icons.delete_outline_rounded, size: 16, color: Color(0xFFEF4444)),
+                              ),
+                            )
+                          else
+                            const SizedBox(width: 28),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNarrowInvestmentList({
+    required BuildContext context,
+    required GoalModel goal,
+    required GoalProvider provider,
+    required List<_InvestmentEntry> entries,
+  }) {
+    return Column(
+      children: entries.map((entry) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top line: Date + Badges on left, Actions on right
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 2,
+                    children: [
+                      Text(
+                        DateFormat('dd-MMM-yyyy').format(entry.date),
+                        style: const TextStyle(
+                          color: Color(0xFF1E293B),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (entry.isToday)
+                        _buildMiniBadge('Today', const Color(0xFFECFDF5), const Color(0xFF059669))
+                      else if (entry.isStartDate)
+                        _buildMiniBadge('Start', const Color(0xFFF1F5F9), const Color(0xFF64748B)),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InkWell(
+                        onTap: () => _showEditInvestmentDialog(context, goal, provider, entry),
+                        borderRadius: BorderRadius.circular(6),
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(Icons.edit_outlined, size: 16, color: Color(0xFF64748B)),
+                        ),
+                      ),
+                      if (entry.snapshot != null)
+                        InkWell(
+                          onTap: () => _showDeleteInvestmentDialog(context, goal, provider, entry),
+                          borderRadius: BorderRadius.circular(6),
+                          child: const Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Icon(Icons.delete_outline_rounded, size: 16, color: Color(0xFFEF4444)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+
+              // Bottom line: Balance on left, Change on right
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Recorded Balance',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _currencyFormatter.format(entry.amount),
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  _buildChangePill(entry),
+                ],
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildMiniBadge(String label, Color bg, Color text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: text,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChangePill(_InvestmentEntry entry) {
+    if (entry.isStartDate && (entry.previousAmount == null || entry.diff == 0)) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          entry.amount > 0 ? 'Starting balance' : 'Goal started (₹0)',
+          style: const TextStyle(
+            color: Color(0xFF64748B),
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+
+    if (entry.previousAmount == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          'Initial: ${_currencyFormatter.format(entry.amount)}',
+          style: const TextStyle(
+            color: Color(0xFF64748B),
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+
+    if (entry.diff > 0) {
+      final pctStr = entry.percentChange != null
+          ? ' (+${entry.percentChange!.toStringAsFixed(1)}%)'
+          : '';
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFECFDF5),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFA7F3D0)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.arrow_upward_rounded, size: 12, color: Color(0xFF059669)),
+            const SizedBox(width: 3),
+            Text(
+              '+${_currencyFormatter.format(entry.diff)}$pctStr',
+              style: const TextStyle(
+                color: Color(0xFF059669),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (entry.diff < 0) {
+      final pctStr = entry.percentChange != null
+          ? ' (${entry.percentChange!.toStringAsFixed(1)}%)'
+          : '';
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEF2F2),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFFECACA)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.arrow_downward_rounded, size: 12, color: Color(0xFFDC2626)),
+            const SizedBox(width: 3),
+            Text(
+              '-${_currencyFormatter.format(entry.diff.abs())}$pctStr',
+              style: const TextStyle(
+                color: Color(0xFFDC2626),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const Text(
+      '—',
+      style: TextStyle(
+        color: Color(0xFF94A3B8),
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+
+  void _showRecordInvestmentDialog(
+    BuildContext context,
+    GoalModel goal,
+    GoalProvider provider,
+  ) {
+    DateTime selectedDate = DateTime.now();
+    final controller = TextEditingController(text: goal.currentSavings.toStringAsFixed(0));
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: kCardBg,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: kMoneyGreen.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.add_circle_outline_rounded, color: kMoneyGreen, size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Record Investment Change',
+                  style: TextStyle(color: Colors.black87, fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Record a savings balance for "${goal.name}".',
+                style: const TextStyle(color: Colors.black54, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: goal.startDate,
+                    lastDate: DateTime.now().add(const Duration(days: 3650)),
+                  );
+                  if (picked != null) {
+                    setDialogState(() {
+                      selectedDate = picked;
+                    });
+                  }
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: kScaffoldBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today_rounded, size: 16, color: kMoneyGreen),
+                          const SizedBox(width: 8),
+                          Text(
+                            DateFormat('dd-MMM-yyyy').format(selectedDate),
+                            style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      const Text('Change Date', style: TextStyle(color: kMoneyGreen, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                style: const TextStyle(color: Colors.black87),
+                decoration: InputDecoration(
+                  labelText: 'Savings Balance (₹)',
+                  prefixText: '₹ ',
+                  labelStyle: const TextStyle(color: Colors.black54),
+                  fillColor: kScaffoldBg,
+                  filled: true,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.black12),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: kMoneyGreen, width: 1.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kMoneyGreen,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Save Record'),
+              onPressed: () async {
+                final val = double.tryParse(controller.text.trim());
+                if (val != null && val >= 0) {
+                  try {
+                    await provider.updateGoalSavings(goal, val, onDate: selectedDate);
+                    if (!context.mounted) return;
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Recorded balance of ${_currencyFormatter.format(val)} for ${DateFormat('dd-MMM-yyyy').format(selectedDate)}.',
+                        ),
+                      ),
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not save record: $e')),
+                    );
+                  }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a valid positive number')),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditInvestmentDialog(
+    BuildContext context,
+    GoalModel goal,
+    GoalProvider provider,
+    _InvestmentEntry entry,
+  ) {
+    DateTime selectedDate = entry.date;
+    final controller = TextEditingController(text: entry.amount.toStringAsFixed(0));
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: kCardBg,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: kMoneyGreen.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.edit_outlined, color: kMoneyGreen, size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Edit Investment Record',
+                  style: TextStyle(color: Colors.black87, fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Update recorded balance for "${goal.name}".',
+                style: const TextStyle(color: Colors.black54, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: goal.startDate,
+                    lastDate: DateTime.now().add(const Duration(days: 3650)),
+                  );
+                  if (picked != null) {
+                    setDialogState(() {
+                      selectedDate = picked;
+                    });
+                  }
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: kScaffoldBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today_rounded, size: 16, color: kMoneyGreen),
+                          const SizedBox(width: 8),
+                          Text(
+                            DateFormat('dd-MMM-yyyy').format(selectedDate),
+                            style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      const Text('Change Date', style: TextStyle(color: kMoneyGreen, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                style: const TextStyle(color: Colors.black87),
+                decoration: InputDecoration(
+                  labelText: 'Savings Balance (₹)',
+                  prefixText: '₹ ',
+                  labelStyle: const TextStyle(color: Colors.black54),
+                  fillColor: kScaffoldBg,
+                  filled: true,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.black12),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: kMoneyGreen, width: 1.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kMoneyGreen,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Update'),
+              onPressed: () async {
+                final val = double.tryParse(controller.text.trim());
+                if (val != null && val >= 0) {
+                  try {
+                    await provider.editGoalSavingsSnapshot(
+                      goal,
+                      oldDate: entry.date,
+                      newDate: selectedDate,
+                      newAmount: val,
+                    );
+                    if (!context.mounted) return;
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Updated balance to ${_currencyFormatter.format(val)} for ${DateFormat('dd-MMM-yyyy').format(selectedDate)}.',
+                        ),
+                      ),
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not update record: $e')),
+                    );
+                  }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a valid positive number')),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteInvestmentDialog(
+    BuildContext context,
+    GoalModel goal,
+    GoalProvider provider,
+    _InvestmentEntry entry,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kCardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Record', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
+        content: Text(
+          'Are you sure you want to remove the record of ${_currencyFormatter.format(entry.amount)} on ${DateFormat('dd-MMM-yyyy').format(entry.date)}?',
+          style: const TextStyle(color: Colors.black87, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Delete'),
+            onPressed: () async {
+              try {
+                await provider.deleteGoalSavingsSnapshot(goal, entry.date);
+                if (!context.mounted) return;
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Removed record for ${DateFormat('dd-MMM-yyyy').format(entry.date)}.',
+                    ),
+                  ),
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Could not delete record: $e')),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   void _confirmDelete(BuildContext context, GoalProvider provider, GoalModel goal) {
@@ -1135,4 +2186,26 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
       ),
     );
   }
+}
+
+class _InvestmentEntry {
+  final DateTime date;
+  final double amount;
+  final double? previousAmount;
+  final double diff;
+  final double? percentChange;
+  final bool isStartDate;
+  final bool isToday;
+  final SavingsSnapshot? snapshot;
+
+  const _InvestmentEntry({
+    required this.date,
+    required this.amount,
+    required this.previousAmount,
+    required this.diff,
+    required this.percentChange,
+    required this.isStartDate,
+    required this.isToday,
+    this.snapshot,
+  });
 }

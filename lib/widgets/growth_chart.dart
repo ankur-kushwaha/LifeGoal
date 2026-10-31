@@ -93,6 +93,20 @@ class _GrowthChartState extends State<GrowthChart> {
   }
 
   @override
+  void didUpdateWidget(covariant GrowthChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.points != widget.points) {
+      if (_activePoint != null &&
+          !widget.points.any((p) =>
+              GoalModel.isSameCalendarDay(p.date, _activePoint!.date) &&
+              (p.amount - _activePoint!.amount).abs() < 0.01)) {
+        _activePoint = null;
+        _activeOffset = null;
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (widget.points.isEmpty) {
       return const SizedBox(
@@ -102,6 +116,8 @@ class _GrowthChartState extends State<GrowthChart> {
         ),
       );
     }
+
+    final hasProjected = widget.points.any((p) => p.isProjected);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,7 +176,8 @@ class _GrowthChartState extends State<GrowthChart> {
           runSpacing: 6,
           children: [
             _legendDot(kMoneyGreen, 'Recorded'),
-            _legendDash(kMoneyGreen.withOpacity(0.7), 'Projected (no new SIP)'),
+            if (hasProjected)
+              _legendDash(kMoneyGreen.withOpacity(0.7), 'Projected (no new SIP)'),
             _legendDash(Colors.orangeAccent, 'Target ${_compact(widget.targetAmount)}'),
           ],
         ),
@@ -286,6 +303,7 @@ class _ChartLayout {
   final DateTime minDate;
   final DateTime maxDate;
   final int dateSpan;
+  final double yMin;
   final double yMax;
 
   const _ChartLayout({
@@ -294,6 +312,7 @@ class _ChartLayout {
     required this.minDate,
     required this.maxDate,
     required this.dateSpan,
+    required this.yMin,
     required this.yMax,
   });
 
@@ -310,11 +329,41 @@ class _ChartLayout {
     final minDate = points.first.date;
     final maxDate = points.last.date.isAfter(today) ? points.last.date : today;
     final dateSpan = math.max(1, maxDate.difference(minDate).inDays);
-    final maxValue = math.max(
-      targetAmount,
-      points.map((p) => p.amount).fold<double>(0, math.max),
-    );
-    final yMax = maxValue <= 0 ? 1.0 : maxValue * 1.08;
+
+    final minPointAmount = points
+        .map((p) => p.amount)
+        .fold<double>(double.infinity, math.min);
+    final maxPointAmount = points
+        .map((p) => p.amount)
+        .fold<double>(0.0, math.max);
+
+    final hasProjected = points.any((p) => p.isProjected);
+
+    // In ALL mode (or when target is within 2.5x of current savings), include target in the scale.
+    // If target is massive compared to short timeframe savings, focus on visible points so movement isn't flattened.
+    final bool includeTarget = targetAmount > 0 &&
+        (hasProjected || maxPointAmount <= 0 || targetAmount <= maxPointAmount * 2.5);
+
+    final double effectiveMax = includeTarget
+        ? math.max(targetAmount, maxPointAmount)
+        : maxPointAmount;
+
+    final double rawMin = minPointAmount.isFinite ? minPointAmount : 0.0;
+    final double rawMax = effectiveMax <= 0 ? 1.0 : effectiveMax;
+
+    final double rawSpan = rawMax - rawMin;
+    final double pad = rawSpan > 0 ? rawSpan * 0.08 : rawMax * 0.1;
+
+    // The chart doesn't need to start from 0 if the data is well above 0.
+    // If min point is close to 0 (<= 15% of span or <= 0), start from 0.
+    final double yMin;
+    if (rawMin <= 0 || (rawSpan > 0 && rawMin <= rawSpan * 0.15)) {
+      yMin = 0.0;
+    } else {
+      yMin = math.max(0.0, rawMin - pad);
+    }
+
+    final double yMax = rawMax + pad;
 
     return _ChartLayout(
       chartWidth: chartWidth,
@@ -322,13 +371,18 @@ class _ChartLayout {
       minDate: minDate,
       maxDate: maxDate,
       dateSpan: dateSpan,
+      yMin: yMin,
       yMax: yMax,
     );
   }
 
   Offset toOffset(DateTime date, double amount) {
     final x = leftPad + (date.difference(minDate).inDays / dateSpan) * chartWidth;
-    final y = topPad + chartHeight * (1 - (amount / yMax).clamp(0.0, 1.0));
+    final ySpan = yMax - yMin;
+    final normalized = ySpan <= 0
+        ? 0.5
+        : ((amount - yMin) / ySpan).clamp(0.0, 1.0);
+    final y = topPad + chartHeight * (1.0 - normalized);
     return Offset(x, y);
   }
 }
@@ -400,7 +454,7 @@ class _GrowthChartPainter extends CustomPainter {
     for (var i = 0; i <= 3; i++) {
       final y = topPad + chartHeight * (i / 3);
       canvas.drawLine(Offset(leftPad, y), Offset(leftPad + chartWidth, y), gridPaint);
-      final value = layout.yMax * (1 - i / 3);
+      final value = layout.yMax - (layout.yMax - layout.yMin) * (i / 3);
       final label = _axisLabel(value);
       final tp = TextPainter(
         text: TextSpan(
@@ -419,7 +473,7 @@ class _GrowthChartPainter extends CustomPainter {
     );
 
     // Target line
-    if (targetAmount > 0) {
+    if (targetAmount > 0 && targetAmount >= layout.yMin && targetAmount <= layout.yMax) {
       final targetY = toOffset(minDate, targetAmount).dy;
       _drawDashedLine(
         canvas,
@@ -561,13 +615,34 @@ class _GrowthChartPainter extends CustomPainter {
       );
     }
 
-    paintDateLabel(minDate, leftPad, center: false);
-    final todayX = toOffset(GoalModel.calendarDay(today), 0).dx;
-    paintDateLabel(GoalModel.calendarDay(today), todayX);
-    paintDateLabel(maxDate, leftPad + chartWidth - 1);
+    final isSingleDate = GoalModel.isSameCalendarDay(minDate, maxDate);
+    final isEndsAtToday = GoalModel.isSameCalendarDay(today, maxDate);
+
+    if (isSingleDate) {
+      paintDateLabel(minDate, leftPad, center: false);
+    } else if (isEndsAtToday) {
+      paintDateLabel(minDate, leftPad, center: false);
+      if (maxDate.difference(minDate).inDays >= 60) {
+        final midDays = maxDate.difference(minDate).inDays ~/ 2;
+        final midDate = minDate.add(Duration(days: midDays));
+        final midX = toOffset(GoalModel.calendarDay(midDate), 0).dx;
+        paintDateLabel(GoalModel.calendarDay(midDate), midX);
+      }
+      paintDateLabel(maxDate, leftPad + chartWidth - 1);
+    } else {
+      paintDateLabel(minDate, leftPad, center: false);
+      final todayX = toOffset(GoalModel.calendarDay(today), 0).dx;
+      final minRight = leftPad + 55.0;
+      final maxLeft = leftPad + chartWidth - 55.0;
+      if (todayX > minRight && todayX < maxLeft) {
+        paintDateLabel(GoalModel.calendarDay(today), todayX);
+      }
+      paintDateLabel(maxDate, leftPad + chartWidth - 1);
+    }
   }
 
   String _axisLabel(double value) {
+    if (value.abs() < 0.01) return '0';
     if (value >= 10000000) return '${(value / 10000000).toStringAsFixed(1)}Cr';
     if (value >= 100000) return '${(value / 100000).toStringAsFixed(1)}L';
     if (value >= 1000) return '${(value / 1000).toStringAsFixed(0)}k';

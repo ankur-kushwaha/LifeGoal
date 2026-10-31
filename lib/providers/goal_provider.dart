@@ -127,6 +127,21 @@ class GoalProvider extends ChangeNotifier {
     _initializeServices();
   }
 
+  GoalProvider.forTesting({
+    List<GoalModel> goals = const [],
+    double globalInflation = 6.0,
+    double globalReturn = 14.0,
+    DateTime? today,
+    List<FamilyMember> familyMembers = const [],
+  }) {
+    _isLoading = false;
+    _goals = List.from(goals);
+    _globalInflation = globalInflation;
+    _globalReturn = globalReturn;
+    _today = today ?? DateTime(2026, 7, 1);
+    _familyMembers = List.from(familyMembers);
+  }
+
   @override
   void dispose() {
     _cancelAllSubscriptions();
@@ -430,16 +445,37 @@ class GoalProvider extends ChangeNotifier {
     }
   }
 
-  /// Updates savings and records the balance against today's real calendar date.
+  /// Updates savings and records the balance against [onDate] (defaulting to today's real calendar date).
   /// Also advances the planning reference date when the update is newer.
-  Future<void> updateGoalSavings(GoalModel goal, double amount) async {
-    final asOf = GoalModel.calendarDay(DateTime.now());
+  Future<void> updateGoalSavings(GoalModel goal, double amount, {DateTime? onDate}) async {
+    final asOf = GoalModel.calendarDay(onDate ?? DateTime.now());
     await updateGoal(
       goal.recordSavings(amount, asOf, retainBalanceOn: _today),
     );
     if (asOf.isAfter(GoalModel.calendarDay(_today))) {
       await updateSettings(referenceToday: asOf);
     }
+  }
+
+  /// Deletes a recorded savings snapshot on [onDate].
+  Future<void> deleteGoalSavingsSnapshot(GoalModel goal, DateTime onDate) async {
+    await updateGoal(goal.deleteSavingsSnapshot(onDate));
+  }
+
+  /// Edits an existing snapshot or updates its date and amount.
+  Future<void> editGoalSavingsSnapshot(
+    GoalModel goal, {
+    required DateTime oldDate,
+    required DateTime newDate,
+    required double newAmount,
+  }) async {
+    await updateGoal(
+      goal.editSavingsSnapshot(
+        oldDate: oldDate,
+        newDate: newDate,
+        newAmount: newAmount,
+      ),
+    );
   }
 
   Future<void> deleteGoal(String id) async {

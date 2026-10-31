@@ -20,6 +20,47 @@ class SavingsSnapshot {
   }
 }
 
+/// Timeframe selector for the growth chart.
+enum GoalTimeframe {
+  oneMonth,
+  threeMonths,
+  sixMonths,
+  oneYear,
+  all,
+}
+
+extension GoalTimeframeExtension on GoalTimeframe {
+  String get label {
+    switch (this) {
+      case GoalTimeframe.oneMonth:
+        return '1M';
+      case GoalTimeframe.threeMonths:
+        return '3M';
+      case GoalTimeframe.sixMonths:
+        return '6M';
+      case GoalTimeframe.oneYear:
+        return '1Y';
+      case GoalTimeframe.all:
+        return 'ALL';
+    }
+  }
+
+  int? get months {
+    switch (this) {
+      case GoalTimeframe.oneMonth:
+        return 1;
+      case GoalTimeframe.threeMonths:
+        return 3;
+      case GoalTimeframe.sixMonths:
+        return 6;
+      case GoalTimeframe.oneYear:
+        return 12;
+      case GoalTimeframe.all:
+        return null;
+    }
+  }
+}
+
 /// One point on the growth chart (actual recorded balance or future projection).
 class GrowthChartPoint {
   final DateTime date;
@@ -101,29 +142,78 @@ class GoalModel {
     return copyWith(currentSavings: amount, savingsHistory: updated);
   }
 
+  /// Deletes a recorded savings snapshot on [onDate].
+  ///
+  /// Updates [currentSavings] to the latest remaining snapshot amount, or 0.0 if empty.
+  GoalModel deleteSavingsSnapshot(DateTime onDate) {
+    final day = calendarDay(onDate);
+    final updated = savingsHistory.where((s) => !isSameCalendarDay(s.date, day)).toList();
+    updated.sort((a, b) => a.date.compareTo(b.date));
+    final newCurrent = updated.isNotEmpty ? updated.last.amount : 0.0;
+    return copyWith(currentSavings: newCurrent, savingsHistory: updated);
+  }
+
+  /// Edits an existing snapshot or updates its date and amount.
+  GoalModel editSavingsSnapshot({
+    required DateTime oldDate,
+    required DateTime newDate,
+    required double newAmount,
+  }) {
+    final oldDay = calendarDay(oldDate);
+    final newDay = calendarDay(newDate);
+    final updated = savingsHistory.where((s) => !isSameCalendarDay(s.date, oldDay)).toList();
+    final existingIdx = updated.indexWhere((s) => isSameCalendarDay(s.date, newDay));
+    final newSnap = SavingsSnapshot(date: newDay, amount: newAmount);
+    if (existingIdx >= 0) {
+      updated[existingIdx] = newSnap;
+    } else {
+      updated.add(newSnap);
+    }
+    updated.sort((a, b) => a.date.compareTo(b.date));
+    final newCurrent = updated.isNotEmpty ? updated.last.amount : newAmount;
+    return copyWith(currentSavings: newCurrent, savingsHistory: updated);
+  }
+
   /// Historical balances plus month-by-month growth to the target date (no new SIP).
   ///
-  /// The series always begins at [startDate] with amount 0 (goal creation), then
-  /// recorded balances, then projected growth with no new SIP.
-  List<GrowthChartPoint> getGrowthChartSeries(DateTime today, double globalReturn) {
+  /// When [timeframe] is [GoalTimeframe.all], the series begins at [startDate] with
+  /// amount 0 (goal creation), then recorded balances, then projected growth to target date.
+  /// When [timeframe] is a specific period (1M, 3M, 6M, 1Y), it returns recorded history
+  /// within that past period up to [today].
+  List<GrowthChartPoint> getGrowthChartSeries(
+    DateTime today,
+    double globalReturn, {
+    GoalTimeframe timeframe = GoalTimeframe.all,
+  }) {
     final todayDay = calendarDay(today);
     final startDay = calendarDay(startDate);
-    final points = <GrowthChartPoint>[
-      GrowthChartPoint(date: startDay, amount: 0, isProjected: false),
-    ];
-
     final history = List<SavingsSnapshot>.from(savingsHistory)
       ..sort((a, b) => a.date.compareTo(b.date));
 
+    // Determine initial amount on startDay: if there is a snapshot on or before startDay,
+    // use it; otherwise if today equals startDay, use currentSavings; otherwise 0.
+    double initialAmount = 0.0;
+    for (final snap in history) {
+      if (!calendarDay(snap.date).isAfter(startDay)) {
+        initialAmount = snap.amount;
+      }
+    }
+    if (initialAmount == 0.0 && isSameCalendarDay(todayDay, startDay)) {
+      initialAmount = currentSavings;
+    }
+
+    final points = <GrowthChartPoint>[
+      GrowthChartPoint(date: startDay, amount: initialAmount, isProjected: false),
+    ];
+
     for (final snap in history) {
       final day = calendarDay(snap.date);
-      // Origin is always zero at creation; skip any snapshot on/before start day.
+      // Origin is captured by initialAmount; skip any snapshot on/before start day.
       if (!day.isAfter(startDay)) continue;
       points.add(GrowthChartPoint(date: day, amount: snap.amount, isProjected: false));
     }
 
     // Ensure the latest planning "today" is represented with the live balance.
-    // Creation day stays at zero even when today equals startDate.
     if (!isSameCalendarDay(todayDay, startDay)) {
       final hasToday = points.any((p) => isSameCalendarDay(p.date, todayDay));
       if (hasToday) {
@@ -142,8 +232,7 @@ class GoalModel {
       }
     }
 
-    // Keep actual points chronological; drop duplicate dates preferring the last write,
-    // but never replace the creation-day zero origin.
+    // Keep actual points chronological; drop duplicate dates preferring the last write.
     points.sort((a, b) => a.date.compareTo(b.date));
     final deduped = <GrowthChartPoint>[];
     for (final p in points) {
@@ -151,7 +240,7 @@ class GoalModel {
         if (isSameCalendarDay(p.date, startDay)) {
           deduped[deduped.length - 1] = GrowthChartPoint(
             date: startDay,
-            amount: 0,
+            amount: initialAmount,
             isProjected: false,
           );
         } else {
@@ -161,18 +250,64 @@ class GoalModel {
         deduped.add(p);
       }
     }
-    points
-      ..clear()
-      ..addAll(deduped);
 
-    final remainingMonths = getRemainingMonths(today);
-    for (var m = 1; m <= remainingMonths; m++) {
-      final date = calendarDay(dateAfterMonths(todayDay, m));
-      final amount = getSavingsAfterMonths(today, globalReturn, m);
-      points.add(GrowthChartPoint(date: date, amount: amount, isProjected: true));
+    if (timeframe == GoalTimeframe.all) {
+      final allPoints = List<GrowthChartPoint>.from(deduped);
+      final remainingMonths = getRemainingMonths(today);
+      for (var m = 1; m <= remainingMonths; m++) {
+        final date = calendarDay(dateAfterMonths(todayDay, m));
+        final amount = getSavingsAfterMonths(today, globalReturn, m);
+        allPoints.add(GrowthChartPoint(date: date, amount: amount, isProjected: true));
+      }
+      return allPoints;
     }
 
-    return points;
+    final months = timeframe.months!;
+    final rawCutoff = calendarDay(subtractMonths(todayDay, months));
+    final cutoffDate = rawCutoff.isBefore(startDay) ? startDay : rawCutoff;
+
+    if (deduped.isEmpty) return [];
+
+    if (isSameCalendarDay(cutoffDate, todayDay)) {
+      return deduped;
+    }
+
+    if (!cutoffDate.isAfter(deduped.first.date)) {
+      return deduped;
+    }
+
+    GrowthChartPoint prev = deduped.first;
+    GrowthChartPoint next = deduped.last;
+    for (final p in deduped) {
+      if (!p.date.isAfter(cutoffDate)) {
+        prev = p;
+      }
+      if (p.date.isAfter(cutoffDate)) {
+        next = p;
+        break;
+      }
+    }
+
+    final double cutoffAmount;
+    if (isSameCalendarDay(prev.date, cutoffDate)) {
+      cutoffAmount = prev.amount;
+    } else {
+      final totalDays = next.date.difference(prev.date).inDays;
+      final elapsed = cutoffDate.difference(prev.date).inDays;
+      final fraction = totalDays > 0 ? (elapsed / totalDays) : 0.0;
+      cutoffAmount = prev.amount + (next.amount - prev.amount) * fraction;
+    }
+
+    final filtered = <GrowthChartPoint>[
+      GrowthChartPoint(date: cutoffDate, amount: cutoffAmount, isProjected: false),
+      ...deduped.where((p) => p.date.isAfter(cutoffDate)),
+    ];
+
+    if (filtered.length == 1) {
+      filtered.insert(0, GrowthChartPoint(date: cutoffDate, amount: filtered.first.amount, isProjected: false));
+    }
+
+    return filtered;
   }
 
   // Calculate total months between two dates (calendar months)
@@ -227,6 +362,18 @@ class GoalModel {
 
   static DateTime dateAfterMonths(DateTime from, int months) {
     return DateTime(from.year, from.month + months, from.day);
+  }
+
+  static DateTime subtractMonths(DateTime from, int months) {
+    var year = from.year;
+    var month = from.month - months;
+    while (month <= 0) {
+      month += 12;
+      year -= 1;
+    }
+    final daysInMonth = DateTime(year, month + 1, 0).day;
+    final day = min(from.day, daysInMonth);
+    return DateTime(year, month, day);
   }
 
   // Calculate Remaining Target Amount to be accumulated

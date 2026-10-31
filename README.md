@@ -8,7 +8,7 @@ LifeGoal AI is a premium, inflation-aware financial goal planner built with Flut
 - 💰 **Smart SIP Calculator** - Computes monthly investments needed using standard future value annuity formulas.
 - 📊 **Real-Time Progress Tracking** - Watch overall and goal-specific completion percentages and status badges (On Track, Needs Attention, Behind Schedule).
 - 👨‍👩‍👧 **Family Financial Planning** - Filter goals dynamically by account holder (e.g., Ankur, Neha) to view progress individually or combined.
-- 📉 **Scenario Simulator (AI Engine)** - Simulate the impact of increasing SIP contributions or achieving different rates of return in real-time.
+- 📋 **Investment Changes & History** - View detailed ledger entries of recorded balance changes matching the growth chart with full record, edit, and delete management.
 - 💾 **Local Persistence & Portability** - Data is saved securely on-device. Features full JSON backup export & restore functionality.
 
 ---

@@ -258,6 +258,57 @@ void main() {
       expect(updated.savingsHistory.last.amount, 803575.0);
     });
 
+    test('deleteSavingsSnapshot removes snapshot and adjusts currentSavings', () {
+      final goal = GoalModel(
+        id: 'del',
+        name: 'Delete test',
+        account: 'Ankur',
+        targetCost: 100000.0,
+        startDate: DateTime(2024, 1, 1),
+        targetDate: DateTime(2027, 1, 1),
+        currentSavings: 80000.0,
+        savingsHistory: [
+          SavingsSnapshot(date: DateTime(2026, 1, 1), amount: 50000.0),
+          SavingsSnapshot(date: DateTime(2026, 6, 1), amount: 80000.0),
+        ],
+      );
+
+      final deletedLatest = goal.deleteSavingsSnapshot(DateTime(2026, 6, 1));
+      expect(deletedLatest.savingsHistory.length, 1);
+      expect(deletedLatest.savingsHistory.first.amount, 50000.0);
+      expect(deletedLatest.currentSavings, 50000.0);
+
+      final deletedAll = deletedLatest.deleteSavingsSnapshot(DateTime(2026, 1, 1));
+      expect(deletedAll.savingsHistory.isEmpty, true);
+      expect(deletedAll.currentSavings, 0.0);
+    });
+
+    test('editSavingsSnapshot modifies date and amount and updates currentSavings', () {
+      final goal = GoalModel(
+        id: 'edit',
+        name: 'Edit test',
+        account: 'Ankur',
+        targetCost: 100000.0,
+        startDate: DateTime(2024, 1, 1),
+        targetDate: DateTime(2027, 1, 1),
+        currentSavings: 80000.0,
+        savingsHistory: [
+          SavingsSnapshot(date: DateTime(2026, 1, 1), amount: 50000.0),
+          SavingsSnapshot(date: DateTime(2026, 6, 1), amount: 80000.0),
+        ],
+      );
+
+      final edited = goal.editSavingsSnapshot(
+        oldDate: DateTime(2026, 6, 1),
+        newDate: DateTime(2026, 7, 1),
+        newAmount: 85000.0,
+      );
+      expect(edited.savingsHistory.length, 2);
+      expect(edited.savingsHistory.last.amount, 85000.0);
+      expect(GoalModel.isSameCalendarDay(edited.savingsHistory.last.date, DateTime(2026, 7, 1)), true);
+      expect(edited.currentSavings, 85000.0);
+    });
+
     test('Growth chart includes history, today, future projection', () {
       final goal = GoalModel(
         id: 'chart',
@@ -334,6 +385,124 @@ void main() {
       final restored = GoalModel.fromJson(goal.toJson());
       expect(restored.savingsHistory.length, 1);
       expect(restored.savingsHistory.first.amount, 500);
+    });
+
+    test('GoalModel.subtractMonths correctly handles month clamping and year wraps', () {
+      // Oct 31 minus 1 month => Sep 30
+      final sep30 = GoalModel.subtractMonths(DateTime(2026, 10, 31), 1);
+      expect(sep30.year, 2026);
+      expect(sep30.month, 9);
+      expect(sep30.day, 30);
+
+      // Mar 31 minus 1 month in non-leap year 2025 => Feb 28
+      final feb28 = GoalModel.subtractMonths(DateTime(2025, 3, 31), 1);
+      expect(feb28.year, 2025);
+      expect(feb28.month, 2);
+      expect(feb28.day, 28);
+
+      // Jan 15 minus 3 months => Oct 15 of prior year
+      final oct15 = GoalModel.subtractMonths(DateTime(2026, 1, 15), 3);
+      expect(oct15.year, 2025);
+      expect(oct15.month, 10);
+      expect(oct15.day, 15);
+    });
+
+    test('Growth chart timeframe filtering (1M, 3M, 6M, 1Y, ALL)', () {
+      final todayDate = DateTime(2026, 10, 31);
+      final goal = GoalModel(
+        id: 'tf-goal',
+        name: 'Timeframe Goal',
+        account: 'Ankur',
+        targetCost: 250000.0,
+        startDate: DateTime(2024, 10, 4),
+        targetDate: DateTime(2027, 1, 31),
+        currentSavings: 197000.0,
+        savingsHistory: [
+          SavingsSnapshot(date: DateTime(2026, 5, 1), amount: 150000.0),
+          SavingsSnapshot(date: DateTime(2026, 8, 1), amount: 170000.0),
+          SavingsSnapshot(date: DateTime(2026, 10, 1), amount: 190000.0),
+          SavingsSnapshot(date: DateTime(2026, 10, 31), amount: 197000.0),
+        ],
+      );
+
+      // ALL: contains full history + future projection
+      final allSeries = goal.getGrowthChartSeries(todayDate, 0.14, timeframe: GoalTimeframe.all);
+      final allActual = allSeries.where((p) => !p.isProjected).toList();
+      final allProjected = allSeries.where((p) => p.isProjected).toList();
+      expect(GoalModel.isSameCalendarDay(allActual.first.date, DateTime(2024, 10, 4)), true);
+      expect(allActual.first.amount, 0.0);
+      expect(GoalModel.isSameCalendarDay(allActual.last.date, todayDate), true);
+      expect(allActual.last.amount, 197000.0);
+      expect(allProjected, isNotEmpty);
+
+      // 1M: Past 1 month (30 Sep 2026 to 31 Oct 2026), no projections
+      final oneMonthSeries = goal.getGrowthChartSeries(todayDate, 0.14, timeframe: GoalTimeframe.oneMonth);
+      expect(oneMonthSeries.every((p) => !p.isProjected), true);
+      expect(GoalModel.isSameCalendarDay(oneMonthSeries.first.date, DateTime(2026, 9, 30)), true);
+      expect(GoalModel.isSameCalendarDay(oneMonthSeries.last.date, todayDate), true);
+      expect(oneMonthSeries.last.amount, 197000.0);
+      // Cutoff 30 Sep is between 01 Aug (170k) and 01 Oct (190k)
+      expect(oneMonthSeries.first.amount, greaterThanOrEqualTo(170000.0));
+      expect(oneMonthSeries.first.amount, lessThanOrEqualTo(190000.0));
+
+      // 3M: Past 3 months (31 Jul 2026 to 31 Oct 2026)
+      final threeMonthSeries = goal.getGrowthChartSeries(todayDate, 0.14, timeframe: GoalTimeframe.threeMonths);
+      expect(threeMonthSeries.every((p) => !p.isProjected), true);
+      expect(GoalModel.isSameCalendarDay(threeMonthSeries.first.date, DateTime(2026, 7, 31)), true);
+      expect(GoalModel.isSameCalendarDay(threeMonthSeries.last.date, todayDate), true);
+
+      // 6M: Past 6 months (30 Apr 2026 to 31 Oct 2026)
+      final sixMonthSeries = goal.getGrowthChartSeries(todayDate, 0.14, timeframe: GoalTimeframe.sixMonths);
+      expect(sixMonthSeries.every((p) => !p.isProjected), true);
+      expect(GoalModel.isSameCalendarDay(sixMonthSeries.first.date, DateTime(2026, 4, 30)), true);
+      expect(GoalModel.isSameCalendarDay(sixMonthSeries.last.date, todayDate), true);
+
+      // 1Y: Past 1 year (31 Oct 2025 to 31 Oct 2026)
+      final oneYearSeries = goal.getGrowthChartSeries(todayDate, 0.14, timeframe: GoalTimeframe.oneYear);
+      expect(oneYearSeries.every((p) => !p.isProjected), true);
+      expect(GoalModel.isSameCalendarDay(oneYearSeries.first.date, DateTime(2025, 10, 31)), true);
+      expect(GoalModel.isSameCalendarDay(oneYearSeries.last.date, todayDate), true);
+    });
+
+    test('Growth chart timeframe clamps to startDate if goal is newer than timeframe', () {
+      final todayDate = DateTime(2026, 10, 31);
+      final newGoal = GoalModel(
+        id: 'new-goal',
+        name: 'New Goal',
+        account: 'Ankur',
+        targetCost: 100000.0,
+        startDate: DateTime(2026, 10, 15), // only 16 days old
+        targetDate: DateTime(2027, 10, 15),
+        currentSavings: 20000.0,
+      );
+
+      // 1M cutoff (30 Sep) is before goal creation (15 Oct), should clamp to startDate
+      final series = newGoal.getGrowthChartSeries(todayDate, 0.14, timeframe: GoalTimeframe.oneMonth);
+      expect(GoalModel.isSameCalendarDay(series.first.date, DateTime(2026, 10, 15)), true);
+      expect(GoalModel.isSameCalendarDay(series.last.date, todayDate), true);
+      expect(series.first.amount, 0.0);
+      expect(series.last.amount, 20000.0);
+    });
+
+    test('Growth chart starts from initial snapshot amount if recorded on start date', () {
+      final goal = GoalModel(
+        id: 'initial-balance',
+        name: 'Initial Balance Goal',
+        account: 'Ankur',
+        targetCost: 1000000.0,
+        startDate: DateTime(2026, 1, 1),
+        targetDate: DateTime(2027, 1, 1),
+        currentSavings: 500000.0,
+        savingsHistory: [
+          SavingsSnapshot(date: DateTime(2026, 1, 1), amount: 400000.0),
+          SavingsSnapshot(date: DateTime(2026, 6, 1), amount: 500000.0),
+        ],
+      );
+
+      final series = goal.getGrowthChartSeries(DateTime(2026, 6, 1), 0.14);
+      final actual = series.where((p) => !p.isProjected).toList();
+      expect(actual.first.amount, 400000.0);
+      expect(GoalModel.isSameCalendarDay(actual.first.date, DateTime(2026, 1, 1)), true);
     });
   });
 }
