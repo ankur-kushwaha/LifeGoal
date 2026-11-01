@@ -69,7 +69,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         break;
       case GoalHealth.needsAttention:
         healthColor = const Color(0xFFF59E0B);
-        healthText = 'Attention';
+        healthText = 'Attentive';
         break;
       case GoalHealth.behindSchedule:
         healthColor = const Color(0xFFEF4444);
@@ -276,6 +276,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
               _buildTimelineChip('Time Left', _formatMonthsLeft(remainingMonths)),
               _buildTimelineChip('Inflation', '${inflationPct.toStringAsFixed(1)}%'),
               _buildTimelineChip('Return', '${returnRatePct.toStringAsFixed(1)}%'),
+              _buildTimelineChip('Discipline', '${(goal.getInvestmentDisciplineRatio(today, globalInflation, globalReturn) * 100).clamp(0, 999).toStringAsFixed(0)}%'),
             ],
           ),
           const SizedBox(height: 20),
@@ -1337,6 +1338,12 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     required GoalProvider provider,
     required List<_InvestmentEntry> entries,
   }) {
+    final reqSip = goal.getRequiredSIP(
+      provider.today,
+      provider.globalInflation,
+      provider.globalReturn,
+    );
+
     const headerStyle = TextStyle(
       color: Color(0xFF94A3B8),
       fontSize: 10,
@@ -1422,7 +1429,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                             style: const TextStyle(
                               color: Color(0xFF1E293B),
                               fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                           if (entry.isToday)
@@ -1452,7 +1459,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                       flex: 4,
                       child: Align(
                         alignment: Alignment.centerRight,
-                        child: _buildChangePill(entry),
+                        child: _buildChangePill(entry, reqSip: reqSip),
                       ),
                     ),
 
@@ -1500,6 +1507,12 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     required GoalProvider provider,
     required List<_InvestmentEntry> entries,
   }) {
+    final reqSip = goal.getRequiredSIP(
+      provider.today,
+      provider.globalInflation,
+      provider.globalReturn,
+    );
+
     return Column(
       children: entries.map((entry) {
         return Container(
@@ -1585,7 +1598,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                       ),
                     ],
                   ),
-                  _buildChangePill(entry),
+                  _buildChangePill(entry, reqSip: reqSip),
                 ],
               ),
             ],
@@ -1613,7 +1626,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     );
   }
 
-  Widget _buildChangePill(_InvestmentEntry entry) {
+  Widget _buildChangePill(_InvestmentEntry entry, {double? reqSip}) {
     if (entry.isStartDate && (entry.previousAmount == null || entry.diff == 0)) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1654,6 +1667,11 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
       final pctStr = entry.percentChange != null
           ? ' (+${entry.percentChange!.toStringAsFixed(1)}%)'
           : '';
+      final isSipMatch = reqSip != null &&
+          reqSip > 0 &&
+          ((entry.diff - reqSip).abs() <= max(reqSip * 0.25, 500) ||
+              (entry.diff >= reqSip * 0.75 && entry.diff <= reqSip * 1.5));
+
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
@@ -1674,6 +1692,25 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                 fontWeight: FontWeight.w700,
               ),
             ),
+            if (isSipMatch) ...[
+              const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF059669),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: const Text(
+                  'SIP',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       );

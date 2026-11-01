@@ -80,15 +80,25 @@ export function buildGoalContext(
       0,
       (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth()),
     );
-    const expectedProgress = elapsedMonths / totalMonths;
-    const actualProgress = progress / 100;
+    const r = returnRate / 12;
+    const scheduledSIP = r > 0
+      ? (adjustedTarget * r) / (Math.pow(1 + r, totalMonths) - 1)
+      : adjustedTarget / totalMonths;
+    const clampedElapsed = Math.min(elapsedMonths, totalMonths);
+    const scheduledAccumulated = r > 0
+      ? scheduledSIP * (Math.pow(1 + r, clampedElapsed) - 1) / r
+      : scheduledSIP * clampedElapsed;
+    const disciplineRatio = scheduledAccumulated > 0
+      ? currentSavings / scheduledAccumulated
+      : 1.0;
+
     let health = "on track";
     if (gap <= 0) {
       health = "fully funded";
-    } else if (actualProgress < expectedProgress * 0.8) {
+    } else if (disciplineRatio < 0.8) {
       health = "behind schedule";
-    } else if (actualProgress < expectedProgress) {
-      health = "needs attention";
+    } else if (disciplineRatio < 1.0) {
+      health = "attentive";
     }
 
     if (goal.account) accounts.add(goal.account);

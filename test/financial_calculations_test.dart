@@ -504,5 +504,83 @@ void main() {
       expect(actual.first.amount, 400000.0);
       expect(GoalModel.isSameCalendarDay(actual.first.date, DateTime(2026, 1, 1)), true);
     });
+
+    test('Investment discipline benchmark and GoalHealth status evaluation', () {
+      final goal = GoalModel(
+        id: 'discipline-test',
+        name: 'Discipline Test',
+        account: 'Ankur',
+        targetCost: 120000.0, // inflation target will be adjusted
+        startDate: DateTime(2026, 1, 1),
+        targetDate: DateTime(2027, 1, 1), // 12 months total
+        currentSavings: 50000.0,
+      );
+
+      final todayMidway = DateTime(2026, 7, 1); // 6 months elapsed
+      final scheduled = goal.getScheduledAccumulatedSavings(todayMidway, globalInflation, globalReturn);
+      expect(scheduled, greaterThan(0));
+
+      final ratio = goal.getInvestmentDisciplineRatio(todayMidway, globalInflation, globalReturn);
+      expect(ratio, closeTo(goal.currentSavings / scheduled, 0.001));
+
+      // 1. Goal with 100%+ discipline -> onTrack
+      final disciplinedGoal = goal.copyWith(currentSavings: scheduled * 1.05);
+      expect(disciplinedGoal.getHealth(todayMidway, globalInflation, globalReturn), GoalHealth.onTrack);
+
+      // 2. Goal with 85% discipline without recent SIP -> needsAttention (Attentive)
+      final attentiveGoal = goal.copyWith(currentSavings: scheduled * 0.85);
+      expect(attentiveGoal.getHealth(todayMidway, globalInflation, globalReturn), GoalHealth.needsAttention);
+
+      // 3. Goal with 50% discipline without recent SIP -> behindSchedule
+      final behindGoal = goal.copyWith(currentSavings: scheduled * 0.50);
+      expect(behindGoal.getHealth(todayMidway, globalInflation, globalReturn), GoalHealth.behindSchedule);
+    });
+
+    test('Recent SIP addition detection (isLastInvestmentApproxSIP) and status promotion', () {
+      final goal = GoalModel(
+        id: 'sip-test',
+        name: 'SIP Test',
+        account: 'Ankur',
+        targetCost: 120000.0,
+        startDate: DateTime(2026, 1, 1),
+        targetDate: DateTime(2027, 1, 1),
+        currentSavings: 45000.0,
+        savingsHistory: [
+          SavingsSnapshot(date: DateTime(2026, 1, 1), amount: 0.0),
+          SavingsSnapshot(date: DateTime(2026, 6, 1), amount: 35000.0),
+          SavingsSnapshot(date: DateTime(2026, 7, 1), amount: 45000.0), // +10,000 diff
+        ],
+      );
+
+      final todayDate = DateTime(2026, 7, 1);
+      final reqSip = goal.getRequiredSIP(todayDate, globalInflation, globalReturn);
+      final lastDiff = goal.getLastInvestmentDiff(todayDate, globalReturn);
+      expect(lastDiff, 10000.0);
+
+      // Diff (10,000) vs reqSip
+      final isApprox = goal.isLastInvestmentApproxSIP(todayDate, globalInflation, globalReturn);
+      expect(isApprox, reqSip <= 13500);
+
+      // Goal with 85% discipline promoted to onTrack if recent SIP was added
+      final scheduled = goal.getScheduledAccumulatedSavings(todayDate, globalInflation, globalReturn);
+      final sipPromotedGoal = GoalModel(
+        id: 'promoted-test',
+        name: 'Promoted Test',
+        account: 'Ankur',
+        targetCost: 120000.0,
+        startDate: DateTime(2026, 1, 1),
+        targetDate: DateTime(2027, 1, 1),
+        currentSavings: scheduled * 0.90, // 90% discipline (normally attentive)
+        savingsHistory: [
+          SavingsSnapshot(date: DateTime(2026, 1, 1), amount: 0.0),
+          SavingsSnapshot(date: DateTime(2026, 6, 1), amount: scheduled * 0.90 - reqSip),
+          SavingsSnapshot(date: DateTime(2026, 7, 1), amount: scheduled * 0.90), // added exact SIP
+        ],
+      );
+
+      expect(sipPromotedGoal.isLastInvestmentApproxSIP(todayDate, globalInflation, globalReturn), true);
+      // Promoted from needsAttention to onTrack because disciplined SIP was deposited!
+      expect(sipPromotedGoal.getHealth(todayDate, globalInflation, globalReturn), GoalHealth.onTrack);
+    });
   });
 }

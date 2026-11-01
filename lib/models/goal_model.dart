@@ -450,7 +450,112 @@ class GoalModel {
     return pct > 100.0 ? 100.0 : pct;
   }
 
-  // Get Goal Health Status based on timeline and savings progress
+  /// Returns the scheduled accumulated savings benchmark by [today],
+  /// assuming disciplined monthly SIP investment from [startDate] to [targetDate].
+  double getScheduledAccumulatedSavings(
+    DateTime today,
+    double globalInflation,
+    double globalReturn,
+  ) {
+    final totalMonths = monthsBetween(startDate, targetDate);
+    if (totalMonths <= 0) return 0.0;
+
+    final elapsedMonths = monthsBetween(startDate, today);
+    if (elapsedMonths <= 0) return 0.0;
+
+    final target = getInflationAdjustedTarget(globalInflation);
+    if (target <= 0) return 0.0;
+
+    final annualRate = getEffectiveReturnRate(globalReturn);
+    final r = annualRate / 12.0;
+
+    // Initial savings at start date (if any recorded on or before startDate)
+    final startDay = calendarDay(startDate);
+    double initialAmount = 0.0;
+    for (final snap in savingsHistory) {
+      if (!calendarDay(snap.date).isAfter(startDay)) {
+        initialAmount = snap.amount;
+      }
+    }
+
+    // Future value of initial savings at target date
+    final initialAtTarget = r > 0
+        ? initialAmount * pow(1 + r, totalMonths)
+        : initialAmount;
+
+    final gapAtStart = target - initialAtTarget;
+
+    // If already fully funded by initial savings alone:
+    if (gapAtStart <= 0) {
+      final monthsToCompound = min(elapsedMonths, totalMonths);
+      return r > 0
+          ? initialAmount * pow(1 + r, monthsToCompound)
+          : initialAmount;
+    }
+
+    // Disciplined monthly SIP needed from start date
+    final scheduledSIP = r > 0
+        ? (gapAtStart * r) / (pow(1 + r, totalMonths) - 1)
+        : (gapAtStart / totalMonths);
+
+    final monthsElapsedClamped = min(elapsedMonths, totalMonths);
+
+    // Accumulated expected savings up to today:
+    final initialAccumulated = r > 0
+        ? initialAmount * pow(1 + r, monthsElapsedClamped)
+        : initialAmount;
+
+    final sipAccumulated = r > 0
+        ? scheduledSIP * (pow(1 + r, monthsElapsedClamped) - 1) / r
+        : scheduledSIP * monthsElapsedClamped;
+
+    return initialAccumulated + sipAccumulated;
+  }
+
+  /// Returns the investment discipline ratio (current savings / scheduled accumulated savings).
+  /// A ratio >= 1.0 means the investor has met or exceeded the disciplined savings plan.
+  double getInvestmentDisciplineRatio(
+    DateTime today,
+    double globalInflation,
+    double globalReturn,
+  ) {
+    final scheduled = getScheduledAccumulatedSavings(today, globalInflation, globalReturn);
+    if (scheduled <= 0) {
+      return currentSavings >= 0 ? 1.0 : 0.0;
+    }
+    return currentSavings / scheduled;
+  }
+
+  /// Returns the change in savings balance between the most recent recorded snapshot
+  /// and the previous recorded snapshot in [savingsHistory].
+  /// Returns null if fewer than 2 snapshots exist.
+  double? getLastInvestmentDiff(DateTime today, double globalReturn) {
+    if (savingsHistory.length < 2) return null;
+    final sorted = List<SavingsSnapshot>.from(savingsHistory)
+      ..sort((a, b) => a.date.compareTo(b.date));
+    return sorted.last.amount - sorted[sorted.length - 2].amount;
+  }
+
+  /// Returns true if the most recent recorded investment addition is approximately equal
+  /// to the required monthly SIP amount (e.g. within ±25% tolerance).
+  bool isLastInvestmentApproxSIP(
+    DateTime today,
+    double globalInflation,
+    double globalReturn, {
+    double tolerance = 0.25,
+  }) {
+    final reqSip = getRequiredSIP(today, globalInflation, globalReturn);
+    if (reqSip <= 0) return true;
+
+    final diff = getLastInvestmentDiff(today, globalReturn);
+    if (diff == null || diff <= 0) return false;
+
+    final minSip = reqSip * (1.0 - tolerance);
+    final maxSip = reqSip * (1.0 + tolerance + 0.10);
+    return diff >= minSip && diff <= maxSip;
+  }
+
+  // Get Goal Health Status based on investment discipline
   GoalHealth getHealth(DateTime today, double globalInflation, double globalReturn) {
     final needed = getRemainingAmountNeeded(today, globalInflation, globalReturn);
     if (needed <= 0) return GoalHealth.onTrack;
@@ -462,14 +567,31 @@ class GoalModel {
     final elapsedMonths = monthsBetween(startDate, today);
     if (elapsedMonths <= 0) return GoalHealth.onTrack; // Just started!
 
-    final expectedProgress = elapsedMonths / totalMonths;
-    final actualProgress = getPercentDone(today, globalInflation, globalReturn) / 100.0;
+    final remainingMonths = getRemainingMonths(today);
+    final target = getInflationAdjustedTarget(globalInflation);
 
-    if (actualProgress >= expectedProgress) {
+    if (remainingMonths <= 0) {
+      if (target <= 0 || currentSavings >= target) return GoalHealth.onTrack;
+      if (currentSavings >= target * 0.8) return GoalHealth.needsAttention;
+      return GoalHealth.behindSchedule;
+    }
+
+    final discipline = getInvestmentDisciplineRatio(today, globalInflation, globalReturn);
+    final addedRecentSip = isLastInvestmentApproxSIP(today, globalInflation, globalReturn);
+
+    if (discipline >= 1.0) {
       return GoalHealth.onTrack;
-    } else if (actualProgress >= expectedProgress * 0.8) {
+    } else if (discipline >= 0.8) {
+      // In the 80%-99% range, but user actively added their monthly SIP installment
+      if (addedRecentSip) {
+        return GoalHealth.onTrack;
+      }
       return GoalHealth.needsAttention;
     } else {
+      // Lagging behind (<80%), but actively began disciplined SIP contributions
+      if (addedRecentSip && discipline >= 0.6) {
+        return GoalHealth.needsAttention;
+      }
       return GoalHealth.behindSchedule;
     }
   }

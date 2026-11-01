@@ -1604,6 +1604,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? (goal.currentSavings / inflationTarget).clamp(0.0, 1.0)
         : 0.0;
 
+    final bool hasAddedSip = goal.isLastInvestmentApproxSIP(
+      provider.today,
+      provider.globalInflation,
+      provider.globalReturn,
+    );
+
     final Color healthColor;
     final String healthText;
     switch (health) {
@@ -1613,7 +1619,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         break;
       case GoalHealth.needsAttention:
         healthColor = const Color(0xFFF59E0B);
-        healthText = 'Attention';
+        healthText = 'Attentive';
         break;
       case GoalHealth.behindSchedule:
         healthColor = const Color(0xFFEF4444);
@@ -1835,15 +1841,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Row(
+                                Row(
                                   children: [
-                                    Icon(
+                                    const Icon(
                                       Icons.calendar_month_outlined,
                                       size: 12,
                                       color: Color(0xFF64748B),
                                     ),
-                                    SizedBox(width: 4),
-                                    Text(
+                                    const SizedBox(width: 4),
+                                    const Text(
                                       'MONTHLY SIP',
                                       style: TextStyle(
                                         color: Color(0xFF64748B),
@@ -1852,6 +1858,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         letterSpacing: 0.5,
                                       ),
                                     ),
+                                    if (hasAddedSip) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFECFDF5),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.check_circle_outline_rounded, size: 10, color: Color(0xFF059669)),
+                                            SizedBox(width: 2.5),
+                                            Text(
+                                              'SIP added',
+                                              style: TextStyle(
+                                                color: Color(0xFF059669),
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                                 const SizedBox(height: 3),
