@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.scheduledDailyNotifications = exports.generateNotification = void 0;
+exports.getAllFamiliesAdmin = exports.scheduledDailyNotifications = exports.generateNotification = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
@@ -172,5 +172,65 @@ exports.scheduledDailyNotifications = (0, scheduler_1.onSchedule)({
             console.error(`Scheduled notification failed for ${familyDoc.id}:`, error);
         }
     }
+});
+exports.getAllFamiliesAdmin = (0, https_1.onCall)({
+    region: "asia-south1",
+}, async (request) => {
+    const userEmail = request.auth?.token?.email?.toLowerCase() ?? "";
+    const isSuperAdminEmail = userEmail === "ankur.kus1@gmail.com" ||
+        userEmail === "admin@lifegoal.ai" ||
+        userEmail === "ankurkushwaha@gmail.com" ||
+        userEmail.endsWith("@lifegoal.ai");
+    const pin = request.data?.pin ?? "";
+    const isPinValid = pin === "8899";
+    if (!isSuperAdminEmail && !isPinValid) {
+        throw new https_1.HttpsError("permission-denied", "Only super admin with authorized email or master PIN can fetch all families.");
+    }
+    const firestore = db();
+    const familiesSnapshot = await firestore.collection("families").get();
+    const results = await Promise.all(familiesSnapshot.docs.map(async (doc) => {
+        const familyId = doc.id;
+        const familyData = doc.data() ?? {};
+        const [membersSnap, goalsSnap] = await Promise.all([
+            firestore
+                .collection("families")
+                .doc(familyId)
+                .collection("members")
+                .get(),
+            firestore
+                .collection("families")
+                .doc(familyId)
+                .collection("goals")
+                .get(),
+        ]);
+        const members = membersSnap.docs.map((m) => {
+            const mData = m.data();
+            return {
+                userId: m.id,
+                ...mData,
+            };
+        });
+        const goals = goalsSnap.docs.map((g) => {
+            const gData = g.data();
+            return {
+                id: g.id,
+                ...gData,
+            };
+        });
+        return {
+            family: {
+                id: familyId,
+                name: familyData.name ?? "Family",
+                adminId: familyData.adminId ?? "",
+                createdAt: familyData.createdAt ?? new Date().toISOString(),
+            },
+            globalInflation: familyData.globalInflation ?? 6,
+            globalReturn: familyData.globalReturn ?? 14,
+            today: familyData.today ?? new Date().toISOString(),
+            members,
+            goals,
+        };
+    }));
+    return { families: results };
 });
 //# sourceMappingURL=index.js.map

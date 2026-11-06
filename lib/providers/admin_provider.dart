@@ -205,12 +205,15 @@ class AdminProvider extends ChangeNotifier {
 
   Future<void> fetchAllFamilies(GoalProvider goalProvider) async {
     _isLoadingFamilies = true;
+    _lastError = null;
     notifyListeners();
     try {
       _allFamilies = await _service.loadAllFamiliesWithDetails(
         currentGoalProvider: goalProvider,
+        pin: _config.adminPin,
       );
     } catch (e) {
+      _lastError = 'Error fetching all families: $e';
       debugPrint('Error fetching all families in AdminProvider: $e');
     } finally {
       _isLoadingFamilies = false;

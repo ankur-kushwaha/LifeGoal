@@ -185,3 +185,82 @@ export const scheduledDailyNotifications = onSchedule(
     }
   },
 );
+
+export const getAllFamiliesAdmin = onCall(
+  {
+    region: "asia-south1",
+  },
+  async (request) => {
+    const userEmail = request.auth?.token?.email?.toLowerCase() ?? "";
+    const isSuperAdminEmail =
+      userEmail === "ankur.kus1@gmail.com" ||
+      userEmail === "admin@lifegoal.ai" ||
+      userEmail === "ankurkushwaha@gmail.com" ||
+      userEmail.endsWith("@lifegoal.ai");
+
+    const pin = (request.data?.pin as string | undefined) ?? "";
+    const isPinValid = pin === "8899";
+
+    if (!isSuperAdminEmail && !isPinValid) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only super admin with authorized email or master PIN can fetch all families.",
+      );
+    }
+
+    const firestore = db();
+    const familiesSnapshot = await firestore.collection("families").get();
+
+    const results = await Promise.all(
+      familiesSnapshot.docs.map(async (doc) => {
+        const familyId = doc.id;
+        const familyData = doc.data() ?? {};
+
+        const [membersSnap, goalsSnap] = await Promise.all([
+          firestore
+            .collection("families")
+            .doc(familyId)
+            .collection("members")
+            .get(),
+          firestore
+            .collection("families")
+            .doc(familyId)
+            .collection("goals")
+            .get(),
+        ]);
+
+        const members = membersSnap.docs.map((m) => {
+          const mData = m.data();
+          return {
+            userId: m.id,
+            ...mData,
+          };
+        });
+
+        const goals = goalsSnap.docs.map((g) => {
+          const gData = g.data();
+          return {
+            id: g.id,
+            ...gData,
+          };
+        });
+
+        return {
+          family: {
+            id: familyId,
+            name: familyData.name ?? "Family",
+            adminId: familyData.adminId ?? "",
+            createdAt: familyData.createdAt ?? new Date().toISOString(),
+          },
+          globalInflation: familyData.globalInflation ?? 6,
+          globalReturn: familyData.globalReturn ?? 14,
+          today: familyData.today ?? new Date().toISOString(),
+          members,
+          goals,
+        };
+      }),
+    );
+
+    return { families: results };
+  },
+);

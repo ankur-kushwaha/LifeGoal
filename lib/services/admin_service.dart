@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -146,11 +147,73 @@ class AdminService {
   /// Fetches all families along with their members and goals for Super Admin overview.
   Future<List<FamilyOverviewData>> loadAllFamiliesWithDetails({
     GoalProvider? currentGoalProvider,
+    String? pin,
   }) async {
     final Map<String, FamilyOverviewData> familiesMap = {};
 
-    // 1. If Firestore is configured, attempt fetching all families from cloud
+    // 1. First attempt fetching via Cloud Function getAllFamiliesAdmin (fastest & superadmin bypass)
     if (DefaultFirebaseOptions.isConfigured) {
+      try {
+        final functions = FirebaseFunctions.instanceFor(
+          app: Firebase.app(),
+          region: 'asia-south1',
+        );
+        final callable = functions.httpsCallable(
+          'getAllFamiliesAdmin',
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 15)),
+        );
+        final res = await callable.call<Map<String, dynamic>>({
+          'pin': ?pin,
+        });
+        final data = Map<String, dynamic>.from(res.data);
+        final list = data['families'] as List?;
+        if (list != null && list.isNotEmpty) {
+          for (final item in list) {
+            final fMap = Map<String, dynamic>.from(item as Map);
+            final famInfoMap = Map<String, dynamic>.from(fMap['family'] as Map);
+            final famId = famInfoMap['id'] as String;
+            final famInfo = FamilyInfo.fromJson(famId, famInfoMap);
+
+            final membersList = (fMap['members'] as List?)
+                    ?.map((m) => FamilyMember.fromJson(
+                        m['userId'] as String? ?? 'user',
+                        Map<String, dynamic>.from(m as Map)))
+                    .toList() ??
+                [];
+
+            final goalsList = (fMap['goals'] as List?)
+                    ?.map((g) =>
+                        GoalModel.fromJson(Map<String, dynamic>.from(g as Map)))
+                    .toList() ??
+                [];
+
+            final inflation =
+                (fMap['globalInflation'] as num?)?.toDouble() ?? 6.0;
+            final returns = (fMap['globalReturn'] as num?)?.toDouble() ?? 14.0;
+            DateTime refDate = DateTime(2026, 7, 1);
+            if (fMap['today'] is String) {
+              try {
+                refDate = DateTime.parse(fMap['today'] as String);
+              } catch (_) {}
+            }
+
+            familiesMap[famId] = FamilyOverviewData(
+              family: famInfo,
+              members: membersList,
+              goals: goalsList,
+              globalInflation: inflation,
+              globalReturn: returns,
+              referenceDate: refDate,
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('Cloud Function getAllFamiliesAdmin exception: $e');
+      }
+    }
+
+    // 2. Fallback to direct Firestore collection scan if Cloud Function was unavailable
+    if (familiesMap.isEmpty && DefaultFirebaseOptions.isConfigured) {
       try {
         final firestore = FirebaseFirestore.instanceFor(
           app: Firebase.app(),
@@ -207,7 +270,7 @@ class AdminService {
           );
         }
       } catch (e) {
-        debugPrint('Cloud families query exception: $e');
+        debugPrint('Direct Cloud families query exception: $e');
       }
     }
 
