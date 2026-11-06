@@ -13,6 +13,7 @@ import 'family_screen.dart';
 import 'goal_detail_screen.dart';
 import 'goal_form_screen.dart';
 import 'notifications_screen.dart';
+import 'super_admin_screen.dart';
 import '../app_routes.dart';
 
 enum _SipFilter { all, needsSip, fullyFunded }
@@ -150,6 +151,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   context,
                   MaterialPageRoute(builder: (context) => const FamilyScreen()),
                 );
+              } else if (value == 'super_admin') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SuperAdminScreen()),
+                );
               } else if (value == 'privacy') {
                 Navigator.pushNamed(context, AppRoutes.privacy);
               } else if (value == 'logout') {
@@ -232,6 +238,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           color: Color(0xFF1E293B), // slate-800
                           fontWeight: FontWeight.w500,
                           fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(height: 1),
+                PopupMenuItem<String>(
+                  value: 'super_admin',
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.admin_panel_settings_outlined,
+                            color: Color(0xFF0F172A), size: 18),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Super Admin View',
+                              style: TextStyle(
+                                color: Color(0xFF1E293B),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            Text(
+                              'System & AI Config',
+                              style: TextStyle(
+                                color: Colors.black45,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'app_routes.dart';
 import 'constants.dart';
 import 'firebase_options.dart';
+import 'providers/admin_provider.dart';
 import 'providers/goal_provider.dart';
 import 'providers/notification_provider.dart';
 import 'widgets/app_shell.dart';
@@ -29,6 +30,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AdminProvider()),
         ChangeNotifierProvider(create: (_) => GoalProvider()),
         ChangeNotifierProxyProvider<GoalProvider, NotificationProvider>(
           create: (_) => NotificationProvider(),

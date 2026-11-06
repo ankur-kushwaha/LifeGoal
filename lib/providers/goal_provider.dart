@@ -133,6 +133,9 @@ class GoalProvider extends ChangeNotifier {
     double globalReturn = 14.0,
     DateTime? today,
     List<FamilyMember> familyMembers = const [],
+    BaseAuthService? authService,
+    BaseStorageService? storageService,
+    String? currentFamilyId,
   }) {
     _isLoading = false;
     _goals = List.from(goals);
@@ -140,6 +143,9 @@ class GoalProvider extends ChangeNotifier {
     _globalReturn = globalReturn;
     _today = today ?? DateTime(2026, 7, 1);
     _familyMembers = List.from(familyMembers);
+    _authService = authService ?? LocalMockAuthService();
+    if (storageService != null) _storageService = storageService;
+    _currentFamilyId = currentFamilyId;
   }
 
   @override
@@ -398,19 +404,18 @@ class GoalProvider extends ChangeNotifier {
   }
 
   Future<void> updateSettings({double? inflation, double? rateOfReturn, DateTime? referenceToday}) async {
-    if (_currentFamilyId == null) return;
-
     if (inflation != null) _globalInflation = inflation;
     if (rateOfReturn != null) _globalReturn = rateOfReturn;
     if (referenceToday != null) _today = referenceToday;
 
-    final settings = {
-      'globalInflation': _globalInflation,
-      'globalReturn': _globalReturn,
-      'today': _today.toIso8601String(),
-    };
-
-    await _storageService.saveSettings(_currentFamilyId!, settings);
+    if (_currentFamilyId != null) {
+      final settings = {
+        'globalInflation': _globalInflation,
+        'globalReturn': _globalReturn,
+        'today': _today.toIso8601String(),
+      };
+      await _storageService.saveSettings(_currentFamilyId!, settings);
+    }
     notifyListeners();
   }
 

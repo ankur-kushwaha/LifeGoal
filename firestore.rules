@@ -25,6 +25,15 @@ service cloud.firestore {
         get(/databases/$(database)/documents/families/$(familyId)).data.adminId == request.auth.uid;
     }
 
+    function isSuperAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.email != null &&
+         (request.auth.token.email.lower() == 'ankur.kus1@gmail.com' ||
+          request.auth.token.email.lower() == 'admin@lifegoal.ai' ||
+          request.auth.token.email.lower() == 'ankurkushwaha@gmail.com' ||
+          request.auth.token.email.lower().matches('.*@lifegoal\\.ai')));
+    }
+
     function isValidOptionalNumber(field) {
       return !(field in request.resource.data) ||
         request.resource.data[field] == null ||
@@ -134,7 +143,7 @@ service cloud.firestore {
     }
 
     match /families/{familyId} {
-      allow read: if isFamilyMember(familyId);
+      allow read: if isFamilyMember(familyId) || isSuperAdmin();
       allow create: if isAuthenticated() &&
         request.resource.data.keys().hasAll(['name', 'adminId', 'createdAt']) &&
         request.resource.data.adminId == request.auth.uid;
@@ -150,7 +159,7 @@ service cloud.firestore {
       allow delete: if isFamilyAdmin(familyId);
 
       match /members/{memberId} {
-        allow read: if isFamilyMember(familyId);
+        allow read: if isFamilyMember(familyId) || isSuperAdmin();
         allow create: if isAuthenticated() && (
           (memberId == request.auth.uid && request.resource.data.role in ['admin', 'member']) ||
           isFamilyAdmin(familyId)
@@ -166,7 +175,7 @@ service cloud.firestore {
       }
 
       match /goals/{goalId} {
-        allow read: if isFamilyMember(familyId);
+        allow read: if isFamilyMember(familyId) || isSuperAdmin();
         allow create, update: if isFamilyMember(familyId) && isValidGoal(request.resource.data);
         allow delete: if isFamilyMember(familyId);
       }
@@ -193,6 +202,11 @@ service cloud.firestore {
         request.auth.token.email != null &&
         request.auth.token.email.lower() == email;
       allow delete: if false;
+    }
+
+    match /system_config/{configId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
     }
   }
 }
