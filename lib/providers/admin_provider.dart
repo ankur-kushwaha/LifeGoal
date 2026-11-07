@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/admin_config_model.dart';
+import '../models/family_model.dart';
 import '../models/notification_model.dart';
+import '../models/profile_model.dart';
 import '../services/admin_service.dart';
 import '../services/ai_notification_service.dart';
 import '../services/local_ai_service.dart';
@@ -232,6 +234,173 @@ class AdminProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _lastError = 'Failed to delete family: $e';
+      return false;
+    } finally {
+      _isLoadingFamilies = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> addMemberToFamily(
+    String familyId, {
+    required String email,
+    String? displayName,
+    FamilyRole role = FamilyRole.member,
+    MemberProfile memberProfile = const MemberProfile(),
+    bool makePrimaryAdmin = false,
+  }) async {
+    _isLoadingFamilies = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      final newMember = await _service.addMemberToFamily(
+        familyId,
+        email: email,
+        displayName: displayName,
+        role: role,
+        memberProfile: memberProfile,
+        makePrimaryAdmin: makePrimaryAdmin,
+        pin: _config.adminPin,
+      );
+
+      final index = _allFamilies.indexWhere((f) => f.family.id == familyId);
+      if (index != -1) {
+        final fam = _allFamilies[index];
+        final updatedMembers = [...fam.members, newMember]
+          ..sort((a, b) => a.label.compareTo(b.label));
+        final updatedFamily = makePrimaryAdmin
+            ? FamilyInfo(
+                id: fam.family.id,
+                name: fam.family.name,
+                adminId: newMember.userId,
+                createdAt: fam.family.createdAt,
+              )
+            : fam.family;
+
+        _allFamilies[index] = FamilyOverviewData(
+          family: updatedFamily,
+          members: updatedMembers,
+          goals: fam.goals,
+          globalInflation: fam.globalInflation,
+          globalReturn: fam.globalReturn,
+          referenceDate: fam.referenceDate,
+        );
+      }
+      _lastSuccess = 'Added member "${newMember.label}" successfully!';
+      return true;
+    } catch (e) {
+      _lastError = 'Failed to add member: $e';
+      return false;
+    } finally {
+      _isLoadingFamilies = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateFamilyMember(
+    String familyId,
+    String memberId, {
+    String? displayName,
+    FamilyRole? role,
+    MemberProfile? memberProfile,
+    bool makePrimaryAdmin = false,
+  }) async {
+    _isLoadingFamilies = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      final updatedMember = await _service.updateFamilyMember(
+        familyId,
+        memberId,
+        displayName: displayName,
+        role: role,
+        memberProfile: memberProfile,
+        makePrimaryAdmin: makePrimaryAdmin,
+        pin: _config.adminPin,
+      );
+
+      final index = _allFamilies.indexWhere((f) => f.family.id == familyId);
+      if (index != -1) {
+        final fam = _allFamilies[index];
+        final updatedMembers = fam.members.map((m) {
+          if (m.userId == memberId) {
+            return updatedMember;
+          }
+          return m;
+        }).toList();
+
+        final updatedFamily = makePrimaryAdmin
+            ? FamilyInfo(
+                id: fam.family.id,
+                name: fam.family.name,
+                adminId: memberId,
+                createdAt: fam.family.createdAt,
+              )
+            : fam.family;
+
+        _allFamilies[index] = FamilyOverviewData(
+          family: updatedFamily,
+          members: updatedMembers,
+          goals: fam.goals,
+          globalInflation: fam.globalInflation,
+          globalReturn: fam.globalReturn,
+          referenceDate: fam.referenceDate,
+        );
+      }
+      _lastSuccess = 'Updated member "${updatedMember.label}" successfully!';
+      return true;
+    } catch (e) {
+      _lastError = 'Failed to update member: $e';
+      return false;
+    } finally {
+      _isLoadingFamilies = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> removeMemberFromFamily(
+    String familyId,
+    String memberId, {
+    String? newAdminId,
+  }) async {
+    _isLoadingFamilies = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      await _service.removeMemberFromFamily(
+        familyId,
+        memberId,
+        newAdminId: newAdminId,
+        pin: _config.adminPin,
+      );
+
+      final index = _allFamilies.indexWhere((f) => f.family.id == familyId);
+      if (index != -1) {
+        final fam = _allFamilies[index];
+        final updatedMembers = fam.members.where((m) => m.userId != memberId).toList();
+        final currentAdminId = fam.family.adminId;
+        final updatedAdminId = currentAdminId == memberId
+            ? (newAdminId ?? (updatedMembers.isNotEmpty ? updatedMembers.first.userId : ''))
+            : currentAdminId;
+
+        _allFamilies[index] = FamilyOverviewData(
+          family: FamilyInfo(
+            id: fam.family.id,
+            name: fam.family.name,
+            adminId: updatedAdminId,
+            createdAt: fam.family.createdAt,
+          ),
+          members: updatedMembers,
+          goals: fam.goals,
+          globalInflation: fam.globalInflation,
+          globalReturn: fam.globalReturn,
+          referenceDate: fam.referenceDate,
+        );
+      }
+      _lastSuccess = 'Removed member from family successfully!';
+      return true;
+    } catch (e) {
+      _lastError = 'Failed to remove member: $e';
       return false;
     } finally {
       _isLoadingFamilies = false;

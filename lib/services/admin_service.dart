@@ -9,6 +9,7 @@ import '../firebase_options.dart';
 import '../models/admin_config_model.dart';
 import '../models/family_model.dart';
 import '../models/goal_model.dart';
+import '../models/profile_model.dart';
 import '../providers/goal_provider.dart';
 
 class AdminService {
@@ -429,5 +430,273 @@ class AdminService {
     } catch (e) {
       debugPrint('Local family cleanup exception: $e');
     }
+  }
+
+  /// Adds a member to a family as Super Admin
+  Future<FamilyMember> addMemberToFamily(
+    String familyId, {
+    required String email,
+    String? displayName,
+    FamilyRole role = FamilyRole.member,
+    MemberProfile memberProfile = const MemberProfile(),
+    bool makePrimaryAdmin = false,
+    String? pin,
+  }) async {
+    final normEmail = email.trim().toLowerCase();
+
+    // 1. Try via Cloud Function manageFamilyMemberAdmin
+    if (DefaultFirebaseOptions.isConfigured) {
+      try {
+        final functions = FirebaseFunctions.instanceFor(
+          app: Firebase.app(),
+          region: 'asia-south1',
+        );
+        final callable = functions.httpsCallable(
+          'manageFamilyMemberAdmin',
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 20)),
+        );
+        final res = await callable.call<Map<String, dynamic>>({
+          'action': 'add',
+          'familyId': familyId,
+          'email': normEmail,
+          'displayName': ?displayName,
+          'role': role.name,
+          'memberProfile': memberProfile.toJson(),
+          'makePrimaryAdmin': makePrimaryAdmin,
+          'pin': ?pin,
+        });
+        final data = Map<String, dynamic>.from(res.data);
+        if (data['success'] == true && data['member'] != null) {
+          final mData = Map<String, dynamic>.from(data['member'] as Map);
+          return FamilyMember.fromJson(mData['userId'] as String? ?? 'user', mData);
+        }
+      } catch (e) {
+        debugPrint('Cloud Function manageFamilyMemberAdmin (add) exception: $e');
+      }
+    }
+
+    // 2. Direct Firestore fallback
+    String userId = DateTime.now().millisecondsSinceEpoch.toString();
+    final now = DateTime.now();
+    if (DefaultFirebaseOptions.isConfigured) {
+      try {
+        final firestore = FirebaseFirestore.instanceFor(
+          app: Firebase.app(),
+          databaseId: kFirestoreDatabaseId,
+        );
+        final userDocRef = firestore.collection('users').doc();
+        userId = userDocRef.id;
+
+        final newMember = FamilyMember(
+          userId: userId,
+          email: normEmail,
+          displayName: displayName,
+          role: role,
+          joinedAt: now,
+          memberProfile: memberProfile,
+        );
+
+        final batch = firestore.batch();
+        batch.set(
+          firestore.collection('families').doc(familyId).collection('members').doc(userId),
+          newMember.toJson(),
+        );
+        batch.set(userDocRef, {
+          'familyId': familyId,
+          'email': normEmail,
+          'displayName': ?displayName,
+        }, SetOptions(merge: true));
+
+        if (makePrimaryAdmin) {
+          batch.update(firestore.collection('families').doc(familyId), {'adminId': userId});
+        }
+
+        await batch.commit();
+        return newMember;
+      } catch (e) {
+        debugPrint('Direct Firestore addMember exception: $e');
+      }
+    }
+
+    // 3. Local SharedPreferences fallback
+    final newMember = FamilyMember(
+      userId: userId,
+      email: normEmail,
+      displayName: displayName,
+      role: role,
+      joinedAt: now,
+      memberProfile: memberProfile,
+    );
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'members_$familyId';
+      final jsonStr = prefs.getString(key);
+      List<dynamic> list = [];
+      if (jsonStr != null) {
+        list = json.decode(jsonStr) as List;
+      }
+      list.add({'userId': userId, ...newMember.toJson()});
+      await prefs.setString(key, json.encode(list));
+    } catch (_) {}
+
+    return newMember;
+  }
+
+  /// Updates a family member as Super Admin
+  Future<FamilyMember> updateFamilyMember(
+    String familyId,
+    String memberId, {
+    String? displayName,
+    FamilyRole? role,
+    MemberProfile? memberProfile,
+    bool makePrimaryAdmin = false,
+    String? pin,
+  }) async {
+    // 1. Try Cloud Function
+    if (DefaultFirebaseOptions.isConfigured) {
+      try {
+        final functions = FirebaseFunctions.instanceFor(
+          app: Firebase.app(),
+          region: 'asia-south1',
+        );
+        final callable = functions.httpsCallable(
+          'manageFamilyMemberAdmin',
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 20)),
+        );
+        final res = await callable.call<Map<String, dynamic>>({
+          'action': 'update',
+          'familyId': familyId,
+          'memberId': memberId,
+          'displayName': ?displayName,
+          if (role != null) 'role': role.name,
+          if (memberProfile != null) 'memberProfile': memberProfile.toJson(),
+          'makePrimaryAdmin': makePrimaryAdmin,
+          'pin': ?pin,
+        });
+        final data = Map<String, dynamic>.from(res.data);
+        if (data['success'] == true && data['member'] != null) {
+          final mData = Map<String, dynamic>.from(data['member'] as Map);
+          return FamilyMember.fromJson(memberId, mData);
+        }
+      } catch (e) {
+        debugPrint('Cloud Function manageFamilyMemberAdmin (update) exception: $e');
+      }
+    }
+
+    // 2. Direct Firestore fallback
+    if (DefaultFirebaseOptions.isConfigured) {
+      try {
+        final firestore = FirebaseFirestore.instanceFor(
+          app: Firebase.app(),
+          databaseId: kFirestoreDatabaseId,
+        );
+        final memberRef = firestore
+            .collection('families')
+            .doc(familyId)
+            .collection('members')
+            .doc(memberId);
+
+        final updateData = <String, dynamic>{
+          'displayName': ?displayName,
+          if (role != null) 'role': role.name,
+          if (memberProfile != null) 'memberProfile': memberProfile.toJson(),
+        };
+
+        final batch = firestore.batch();
+        batch.set(memberRef, updateData, SetOptions(merge: true));
+        if (makePrimaryAdmin) {
+          batch.update(firestore.collection('families').doc(familyId), {'adminId': memberId});
+        }
+        await batch.commit();
+
+        final snap = await memberRef.get();
+        if (snap.exists) {
+          return FamilyMember.fromJson(memberId, snap.data()!);
+        }
+      } catch (e) {
+        debugPrint('Direct Firestore updateMember exception: $e');
+      }
+    }
+
+    return FamilyMember(
+      userId: memberId,
+      email: '',
+      displayName: displayName,
+      role: role ?? FamilyRole.member,
+      joinedAt: DateTime.now(),
+      memberProfile: memberProfile ?? const MemberProfile(),
+    );
+  }
+
+  /// Removes a member from a family as Super Admin
+  Future<void> removeMemberFromFamily(
+    String familyId,
+    String memberId, {
+    String? newAdminId,
+    String? pin,
+  }) async {
+    // 1. Try Cloud Function
+    if (DefaultFirebaseOptions.isConfigured) {
+      try {
+        final functions = FirebaseFunctions.instanceFor(
+          app: Firebase.app(),
+          region: 'asia-south1',
+        );
+        final callable = functions.httpsCallable(
+          'manageFamilyMemberAdmin',
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 20)),
+        );
+        final res = await callable.call<Map<String, dynamic>>({
+          'action': 'remove',
+          'familyId': familyId,
+          'memberId': memberId,
+          'newAdminId': ?newAdminId,
+          'pin': ?pin,
+        });
+        final data = Map<String, dynamic>.from(res.data);
+        if (data['success'] == true) {
+          return;
+        }
+      } catch (e) {
+        debugPrint('Cloud Function manageFamilyMemberAdmin (remove) exception: $e');
+      }
+    }
+
+    // 2. Direct Firestore fallback
+    if (DefaultFirebaseOptions.isConfigured) {
+      try {
+        final firestore = FirebaseFirestore.instanceFor(
+          app: Firebase.app(),
+          databaseId: kFirestoreDatabaseId,
+        );
+        final batch = firestore.batch();
+        batch.delete(
+          firestore.collection('families').doc(familyId).collection('members').doc(memberId),
+        );
+        batch.set(
+          firestore.collection('users').doc(memberId),
+          {'familyId': FieldValue.delete()},
+          SetOptions(merge: true),
+        );
+        if (newAdminId != null) {
+          batch.update(firestore.collection('families').doc(familyId), {'adminId': newAdminId});
+        }
+        await batch.commit();
+      } catch (e) {
+        debugPrint('Direct Firestore removeMember exception: $e');
+      }
+    }
+
+    // 3. Local storage cleanup
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'members_$familyId';
+      final jsonStr = prefs.getString(key);
+      if (jsonStr != null) {
+        final list = json.decode(jsonStr) as List;
+        list.removeWhere((item) => (item as Map)['userId'] == memberId);
+        await prefs.setString(key, json.encode(list));
+      }
+    } catch (_) {}
   }
 }

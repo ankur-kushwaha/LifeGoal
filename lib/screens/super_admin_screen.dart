@@ -8,6 +8,7 @@ import '../models/admin_config_model.dart';
 import '../models/family_model.dart';
 import '../models/goal_model.dart';
 import '../models/notification_model.dart';
+import '../models/profile_model.dart';
 import '../providers/admin_provider.dart';
 import '../providers/goal_provider.dart';
 
@@ -984,11 +985,30 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                     ),
                   ],
                 ),
-                Text(
-                  members.isNotEmpty
-                      ? 'Admin: ${members.firstWhere((m) => m.isAdmin, orElse: () => members.first).label}'
-                      : 'No members',
-                  style: const TextStyle(fontSize: 12, color: Colors.black45),
+                Row(
+                  children: [
+                    if (members.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Text(
+                          'Admin: ${members.firstWhere((m) => m.isAdmin, orElse: () => members.first).label}',
+                          style: const TextStyle(fontSize: 12, color: Colors.black45),
+                        ),
+                      ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.person_add_outlined, size: 14),
+                      label: const Text('Add Member', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kMoneyGreen,
+                        side: const BorderSide(color: kMoneyGreen),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                      onPressed: () => _showAddMemberDialog(context, fam, adminProvider, goalProvider),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1008,7 +1028,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                 separatorBuilder: (ctx, i) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final member = members[index];
-                  return _buildMemberTile(member);
+                  return _buildMemberTile(member, fam, adminProvider, goalProvider);
                 },
               ),
 
@@ -1232,7 +1252,14 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
     );
   }
 
-  Widget _buildMemberTile(FamilyMember member) {
+  Widget _buildMemberTile(
+    FamilyMember member,
+    FamilyOverviewData fam,
+    AdminProvider adminProvider,
+    GoalProvider goalProvider,
+  ) {
+    final isPrimaryAdmin = fam.family.adminId == member.userId;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1262,12 +1289,15 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
               children: [
                 Row(
                   children: [
-                    Text(
-                      member.label,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: Color(0xFF0F172A),
+                    Flexible(
+                      child: Text(
+                        member.label,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Color(0xFF0F172A),
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1289,15 +1319,42 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                         ),
                       ),
                     ),
+                    if (isPrimaryAdmin) ...[
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.star, size: 9, color: Color(0xFFD97706)),
+                            SizedBox(width: 2),
+                            Text(
+                              'Primary',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFD97706),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 Text(
-                  member.email,
+                  member.email.isNotEmpty ? member.email : 'ID: ${member.userId}',
                   style: const TextStyle(fontSize: 11, color: Colors.black54),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
@@ -1309,9 +1366,714 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
               style: const TextStyle(fontSize: 10, color: Colors.blue),
             ),
           ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, size: 17, color: Color(0xFF2563EB)),
+            tooltip: 'Edit Member',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            onPressed: () => _showEditMemberDialog(
+              context,
+              member,
+              fam,
+              adminProvider,
+              goalProvider,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline, size: 17, color: Colors.redAccent),
+            tooltip: 'Remove Member',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            onPressed: () => _confirmRemoveMember(
+              context,
+              member,
+              fam,
+              adminProvider,
+              goalProvider,
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _showAddMemberDialog(
+    BuildContext context,
+    FamilyOverviewData fam,
+    AdminProvider adminProvider,
+    GoalProvider goalProvider,
+  ) async {
+    final formKey = GlobalKey<FormState>();
+    final emailController = TextEditingController();
+    final nameController = TextEditingController();
+    final incomeController = TextEditingController();
+    final retirementAgeController = TextEditingController();
+    FamilyRole selectedRole = FamilyRole.member;
+    EmploymentType selectedEmp = EmploymentType.salaried;
+    bool makePrimary = fam.members.isEmpty;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: kMoneyGreen.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.person_add_alt_1,
+                    color: kMoneyGreen, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Add Family Member',
+                      style:
+                          TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      fam.family.name,
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 420,
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        labelText: 'Email Address *',
+                        hintText: 'e.g. member@gmail.com',
+                        prefixIcon: const Icon(Icons.email_outlined, size: 18),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) {
+                          return 'Email is required';
+                        }
+                        if (!val.contains('@')) {
+                          return 'Please enter a valid email address';
+                        }
+                        if (fam.members.any((m) =>
+                            m.email.toLowerCase() == val.trim().toLowerCase())) {
+                          return 'Member with this email already exists in family';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Display Name (optional)',
+                        hintText: 'e.g. Alex Saini',
+                        prefixIcon: const Icon(Icons.person_outline, size: 18),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('Role in Family',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black54)),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Center(child: Text('Member')),
+                            selected: selectedRole == FamilyRole.member,
+                            onSelected: (val) {
+                              if (val) {
+                                setDialogState(() {
+                                  selectedRole = FamilyRole.member;
+                                  makePrimary = false;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Center(child: Text('Admin')),
+                            selected: selectedRole == FamilyRole.admin,
+                            onSelected: (val) {
+                              if (val) {
+                                setDialogState(() {
+                                  selectedRole = FamilyRole.admin;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (selectedRole == FamilyRole.admin) ...[
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        title: const Text('Make Primary Family Admin',
+                            style: TextStyle(fontSize: 13)),
+                        subtitle: const Text(
+                            'Transfers primary family admin status to this member',
+                            style: TextStyle(fontSize: 11)),
+                        value: makePrimary,
+                        activeTrackColor: kMoneyGreen,
+                        onChanged: (val) =>
+                            setDialogState(() => makePrimary = val),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    const Text('Employment & Profile',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black54)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<EmploymentType>(
+                      initialValue: selectedEmp,
+                      decoration: InputDecoration(
+                        labelText: 'Employment Type',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                      items: EmploymentType.values
+                          .map((type) => DropdownMenuItem(
+                                value: type,
+                                child: Text(type.label),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() => selectedEmp = val);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: incomeController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: 'Monthly Income',
+                              prefixText: '₹ ',
+                              hintText: '50000',
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextFormField(
+                            controller: retirementAgeController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: 'Retirement Age',
+                              hintText: '60',
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kMoneyGreen,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                if (formKey.currentState?.validate() != true) return;
+                Navigator.pop(ctx);
+
+                final income = double.tryParse(incomeController.text.trim());
+                final retAge = int.tryParse(retirementAgeController.text.trim());
+
+                final profile = MemberProfile(
+                  employmentType: selectedEmp,
+                  monthlyIncome: income,
+                  retirementAge: retAge ?? 60,
+                );
+
+                final success = await adminProvider.addMemberToFamily(
+                  fam.family.id,
+                  email: emailController.text.trim(),
+                  displayName: nameController.text.trim().isNotEmpty
+                      ? nameController.text.trim()
+                      : null,
+                  role: selectedRole,
+                  memberProfile: profile,
+                  makePrimaryAdmin: makePrimary,
+                );
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(success
+                          ? 'Added new member to "${fam.family.name}"!'
+                          : 'Failed to add member: ${adminProvider.lastError ?? "Unknown error"}'),
+                      backgroundColor: success ? kMoneyGreen : Colors.redAccent,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Add Member'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showEditMemberDialog(
+    BuildContext context,
+    FamilyMember member,
+    FamilyOverviewData fam,
+    AdminProvider adminProvider,
+    GoalProvider goalProvider,
+  ) async {
+    final formKey = GlobalKey<FormState>();
+    final nameController =
+        TextEditingController(text: member.displayName ?? member.label);
+    final incomeController = TextEditingController(
+      text: member.memberProfile.monthlyIncome != null
+          ? member.memberProfile.monthlyIncome!.toStringAsFixed(0)
+          : '',
+    );
+    final retirementAgeController = TextEditingController(
+      text: member.memberProfile.retirementAge > 0
+          ? member.memberProfile.retirementAge.toString()
+          : '',
+    );
+    FamilyRole selectedRole = member.role;
+    EmploymentType selectedEmp = member.memberProfile.employmentType;
+    bool makePrimary = fam.family.adminId == member.userId;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.edit_outlined,
+                    color: Color(0xFF2563EB), size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Edit ${member.label}',
+                      style:
+                          const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      member.email.isNotEmpty
+                          ? member.email
+                          : 'ID: ${member.userId}',
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 420,
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Display Name *',
+                        prefixIcon: const Icon(Icons.person_outline, size: 18),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) {
+                          return 'Display name cannot be empty';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('Role in Family',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black54)),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Center(child: Text('Member')),
+                            selected: selectedRole == FamilyRole.member,
+                            onSelected: (val) {
+                              if (val) {
+                                setDialogState(() {
+                                  selectedRole = FamilyRole.member;
+                                  makePrimary = false;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Center(child: Text('Admin')),
+                            selected: selectedRole == FamilyRole.admin,
+                            onSelected: (val) {
+                              if (val) {
+                                setDialogState(() {
+                                  selectedRole = FamilyRole.admin;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text('Primary Family Admin',
+                          style: TextStyle(fontSize: 13)),
+                      subtitle: const Text(
+                          'Sets this member as the family creator/head admin',
+                          style: TextStyle(fontSize: 11)),
+                      value: makePrimary,
+                      activeTrackColor: kMoneyGreen,
+                      onChanged: selectedRole == FamilyRole.member
+                          ? null
+                          : (val) => setDialogState(() => makePrimary = val),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('Employment & Profile',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black54)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<EmploymentType>(
+                      initialValue: selectedEmp,
+                      decoration: InputDecoration(
+                        labelText: 'Employment Type',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                      items: EmploymentType.values
+                          .map((type) => DropdownMenuItem(
+                                value: type,
+                                child: Text(type.label),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() => selectedEmp = val);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: incomeController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: 'Monthly Income',
+                              prefixText: '₹ ',
+                              hintText: '50000',
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextFormField(
+                            controller: retirementAgeController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: 'Retirement Age',
+                              hintText: '60',
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                if (formKey.currentState?.validate() != true) return;
+                Navigator.pop(ctx);
+
+                final income = double.tryParse(incomeController.text.trim());
+                final retAge = int.tryParse(retirementAgeController.text.trim());
+
+                final updatedProfile = member.memberProfile.copyWith(
+                  employmentType: selectedEmp,
+                  monthlyIncome: income,
+                  retirementAge: retAge,
+                );
+
+                final success = await adminProvider.updateFamilyMember(
+                  fam.family.id,
+                  member.userId,
+                  displayName: nameController.text.trim(),
+                  role: selectedRole,
+                  memberProfile: updatedProfile,
+                  makePrimaryAdmin: makePrimary,
+                );
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(success
+                          ? 'Updated member "${nameController.text.trim()}"!'
+                          : 'Failed to update member: ${adminProvider.lastError ?? "Unknown error"}'),
+                      backgroundColor: success ? kMoneyGreen : Colors.redAccent,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Save Changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmRemoveMember(
+    BuildContext context,
+    FamilyMember member,
+    FamilyOverviewData fam,
+    AdminProvider adminProvider,
+    GoalProvider goalProvider,
+  ) async {
+    final isSoleMember = fam.members.length <= 1;
+    final isPrimaryAdmin = fam.family.adminId == member.userId;
+    final remainingMembers =
+        fam.members.where((m) => m.userId != member.userId).toList();
+    String? selectedNewAdminId =
+        remainingMembers.isNotEmpty ? remainingMembers.first.userId : null;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.person_remove_outlined,
+                    color: Colors.redAccent, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Remove Member',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text.rich(
+                TextSpan(
+                  text: 'Are you sure you want to remove ',
+                  children: [
+                    TextSpan(
+                      text: member.label,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    TextSpan(text: ' (${member.email}) from '),
+                    TextSpan(
+                      text: fam.family.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const TextSpan(text: '?'),
+                  ],
+                ),
+                style: const TextStyle(fontSize: 14, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              if (isSoleMember)
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: const Text(
+                    'Notice: This is the only member in the family. Removing them leaves the family with 0 members.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFFD97706)),
+                  ),
+                )
+              else if (isPrimaryAdmin) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade300),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'This member is currently the Primary Family Admin. Please select who should become the new Admin:',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF92400E)),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedNewAdminId,
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          isDense: true,
+                          fillColor: Colors.white,
+                          filled: true,
+                        ),
+                        items: remainingMembers
+                            .map((m) => DropdownMenuItem(
+                                  value: m.userId,
+                                  child: Text('${m.label} (${m.role.name})'),
+                                ))
+                            .toList(),
+                        onChanged: (val) {
+                          setDialogState(() => selectedNewAdminId = val);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Remove Member'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final success = await adminProvider.removeMemberFromFamily(
+        fam.family.id,
+        member.userId,
+        newAdminId: selectedNewAdminId,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success
+                ? 'Removed "${member.label}" from family.'
+                : 'Failed to remove member: ${adminProvider.lastError ?? "Unknown error"}'),
+            backgroundColor: success ? kMoneyGreen : Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildGoalAdminTile(GoalModel goal, FamilyOverviewData fam) {

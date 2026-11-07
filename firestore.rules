@@ -147,7 +147,8 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.resource.data.keys().hasAll(['name', 'adminId', 'createdAt']) &&
         request.resource.data.adminId == request.auth.uid;
-      allow update: if (
+      allow update: if isSuperAdmin() || (
+        (
           (isFamilyAdmin(familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])) ||
           (isFamilyMember(familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['globalInflation', 'globalReturn', 'today'])) ||
           (isFamilyMember(familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['familyProfile']) &&
@@ -155,21 +156,22 @@ service cloud.firestore {
         ) && (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['globalInflation', 'globalReturn', 'today']) ||
           isValidFamilySettings(request.resource.data)
-        );
+        )
+      );
       allow delete: if isFamilyAdmin(familyId) || isSuperAdmin();
 
       match /members/{memberId} {
         allow read: if isFamilyMember(familyId) || isSuperAdmin();
-        allow create: if isAuthenticated() && (
+        allow create: if isSuperAdmin() || (isAuthenticated() && (
           (memberId == request.auth.uid && request.resource.data.role in ['admin', 'member']) ||
           isFamilyAdmin(familyId)
-        );
-        allow update: if isFamilyMember(familyId) && (
+        ));
+        allow update: if isSuperAdmin() || (isFamilyMember(familyId) && (
           isFamilyAdmin(familyId) ||
           (memberId == request.auth.uid &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberProfile']) &&
             isValidMemberProfile(request.resource.data.memberProfile))
-        );
+        ));
         allow delete: if (isFamilyAdmin(familyId) &&
           memberId != get(/databases/$(database)/documents/families/$(familyId)).data.adminId) ||
           isSuperAdmin();

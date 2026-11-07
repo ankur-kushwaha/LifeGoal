@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteFamilyAdmin = exports.getAllFamiliesAdmin = exports.scheduledDailyNotifications = exports.generateNotification = void 0;
+exports.manageFamilyMemberAdmin = exports.deleteFamilyAdmin = exports.getAllFamiliesAdmin = exports.scheduledDailyNotifications = exports.generateNotification = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
@@ -259,5 +259,153 @@ exports.deleteFamilyAdmin = (0, https_1.onCall)({
     // Delete family and all nested subcollections recursively
     await firestore.recursiveDelete(familyRef);
     return { success: true, familyId };
+});
+exports.manageFamilyMemberAdmin = (0, https_1.onCall)({
+    region: "asia-south1",
+}, async (request) => {
+    const userEmail = request.auth?.token?.email?.toLowerCase() ?? "";
+    const isSuperAdminEmail = userEmail === "ankur.kus1@gmail.com" ||
+        userEmail === "admin@lifegoal.ai" ||
+        userEmail === "ankurkushwaha@gmail.com" ||
+        userEmail.endsWith("@lifegoal.ai");
+    const pin = request.data?.pin ?? "";
+    const isPinValid = pin === "8899";
+    if (!isSuperAdminEmail && !isPinValid) {
+        throw new https_1.HttpsError("permission-denied", "Only super admin with authorized email or master PIN can manage family members.");
+    }
+    const action = request.data?.action; // 'add' | 'update' | 'remove'
+    const familyId = request.data?.familyId;
+    if (!familyId || !action) {
+        throw new https_1.HttpsError("invalid-argument", "familyId and action are required.");
+    }
+    const firestore = db();
+    const familyRef = firestore.collection("families").doc(familyId);
+    const familyDoc = await familyRef.get();
+    if (!familyDoc.exists) {
+        throw new https_1.HttpsError("not-found", "Family not found.");
+    }
+    const familyData = familyDoc.data() ?? {};
+    if (action === "add") {
+        const email = request.data?.email?.trim().toLowerCase() ?? "";
+        if (!email || !email.includes("@")) {
+            throw new https_1.HttpsError("invalid-argument", "A valid email is required.");
+        }
+        const displayName = request.data?.displayName?.trim() || null;
+        const role = request.data?.role === "admin" ? "admin" : "member";
+        const memberProfile = request.data?.memberProfile ?? {};
+        const makePrimaryAdmin = Boolean(request.data?.makePrimaryAdmin);
+        // Check if user exists in Firebase Auth
+        let userId;
+        try {
+            const authUser = await admin.auth().getUserByEmail(email);
+            userId = authUser.uid;
+        }
+        catch {
+            userId = firestore.collection("users").doc().id;
+        }
+        const joinedAt = new Date().toISOString();
+        const memberData = {
+            email,
+            displayName: displayName || email.split("@")[0],
+            role,
+            joinedAt,
+            memberProfile,
+        };
+        const batch = firestore.batch();
+        batch.set(familyRef.collection("members").doc(userId), memberData, { merge: true });
+        batch.set(firestore.collection("users").doc(userId), {
+            familyId,
+            email,
+            ...(displayName ? { displayName } : {}),
+        }, { merge: true });
+        if (makePrimaryAdmin || !familyData.adminId) {
+            batch.update(familyRef, { adminId: userId });
+        }
+        await batch.commit();
+        return {
+            success: true,
+            action: "add",
+            member: {
+                userId,
+                ...memberData,
+            },
+            familyAdminId: makePrimaryAdmin || !familyData.adminId ? userId : familyData.adminId,
+        };
+    }
+    if (action === "update") {
+        const memberId = request.data?.memberId;
+        if (!memberId) {
+            throw new https_1.HttpsError("invalid-argument", "memberId is required for update.");
+        }
+        const memberRef = familyRef.collection("members").doc(memberId);
+        const memberDoc = await memberRef.get();
+        if (!memberDoc.exists) {
+            throw new https_1.HttpsError("not-found", "Member not found in family.");
+        }
+        const updateData = {};
+        if (request.data?.displayName !== undefined) {
+            updateData.displayName = request.data.displayName.trim();
+        }
+        if (request.data?.role !== undefined) {
+            updateData.role = request.data.role === "admin" ? "admin" : "member";
+        }
+        if (request.data?.memberProfile !== undefined) {
+            updateData.memberProfile = request.data.memberProfile;
+        }
+        const makePrimaryAdmin = Boolean(request.data?.makePrimaryAdmin);
+        const batch = firestore.batch();
+        if (Object.keys(updateData).length > 0) {
+            batch.set(memberRef, updateData, { merge: true });
+        }
+        if (makePrimaryAdmin) {
+            batch.update(familyRef, { adminId: memberId });
+        }
+        await batch.commit();
+        const updatedSnap = await memberRef.get();
+        return {
+            success: true,
+            action: "update",
+            member: {
+                userId: memberId,
+                ...updatedSnap.data(),
+            },
+            familyAdminId: makePrimaryAdmin ? memberId : familyData.adminId,
+        };
+    }
+    if (action === "remove") {
+        const memberId = request.data?.memberId;
+        if (!memberId) {
+            throw new https_1.HttpsError("invalid-argument", "memberId is required for remove.");
+        }
+        const memberRef = familyRef.collection("members").doc(memberId);
+        const batch = firestore.batch();
+        batch.delete(memberRef);
+        batch.set(firestore.collection("users").doc(memberId), {
+            familyId: admin.firestore.FieldValue.delete(),
+        }, { merge: true });
+        // If removed member was admin, reassign to another member if available
+        let newAdminId = request.data?.newAdminId;
+        if (familyData.adminId === memberId) {
+            if (!newAdminId) {
+                const remainingMembers = await familyRef.collection("members").get();
+                const other = remainingMembers.docs.find((d) => d.id !== memberId);
+                if (other) {
+                    newAdminId = other.id;
+                }
+            }
+            if (newAdminId) {
+                batch.update(familyRef, { adminId: newAdminId });
+                batch.set(familyRef.collection("members").doc(newAdminId), { role: "admin" }, { merge: true });
+            }
+        }
+        await batch.commit();
+        return {
+            success: true,
+            action: "remove",
+            memberId,
+            familyAdminId: newAdminId ?? (familyData.adminId === memberId ? "" : familyData.adminId),
+        };
+    }
+    throw new https_1.HttpsError("invalid-argument", `Unknown action: ${action}`);
 });
 //# sourceMappingURL=index.js.map

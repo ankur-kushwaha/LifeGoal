@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lifegoal_app/models/admin_config_model.dart';
+import 'package:lifegoal_app/models/family_model.dart';
 import 'package:lifegoal_app/models/goal_model.dart';
+import 'package:lifegoal_app/models/profile_model.dart';
 import 'package:lifegoal_app/providers/admin_provider.dart';
 import 'package:lifegoal_app/providers/goal_provider.dart';
 import 'package:lifegoal_app/screens/super_admin_screen.dart';
@@ -206,6 +208,80 @@ void main() {
         expect(adminProvider.allFamilies.any((f) => f.family.id == targetId), isFalse);
         expect(adminProvider.allFamilies.length, initialCount - 1);
       }
+    });
+
+    test('addMemberToFamily, updateFamilyMember, and removeMemberFromFamily manage family members', () async {
+      final adminProvider = AdminProvider();
+      final goalProvider = GoalProvider.forTesting();
+
+      // Ensure mock family exists in storage
+      final prefs = await SharedPreferences.getInstance();
+      const famId = 'fam-test-123';
+      final family = FamilyInfo(
+        id: famId,
+        name: 'Test Family',
+        adminId: 'admin-1',
+        createdAt: DateTime(2025, 1, 1),
+      );
+      await prefs.setString('family_$famId', json.encode(family.toJson()));
+      await prefs.setString('members_$famId', json.encode([
+        {
+          'userId': 'admin-1',
+          'email': 'admin@test.com',
+          'displayName': 'Admin One',
+          'role': 'admin',
+          'joinedAt': DateTime(2025, 1, 1).toIso8601String(),
+        }
+      ]));
+
+      await adminProvider.fetchAllFamilies(goalProvider);
+      expect(adminProvider.allFamilies.any((f) => f.family.id == famId), isTrue);
+
+      // 1. Add member
+      final addOk = await adminProvider.addMemberToFamily(
+        famId,
+        email: 'newuser@test.com',
+        displayName: 'New Member',
+        role: FamilyRole.member,
+        memberProfile: const MemberProfile(
+          employmentType: EmploymentType.salaried,
+          monthlyIncome: 85000,
+          retirementAge: 58,
+        ),
+      );
+      expect(addOk, isTrue);
+
+      final famAfterAdd = adminProvider.allFamilies.firstWhere((f) => f.family.id == famId);
+      final added = famAfterAdd.members.firstWhere((m) => m.email == 'newuser@test.com');
+      expect(added.displayName, 'New Member');
+      expect(added.memberProfile.monthlyIncome, 85000);
+      expect(added.memberProfile.retirementAge, 58);
+
+      // 2. Update member
+      final updateOk = await adminProvider.updateFamilyMember(
+        famId,
+        added.userId,
+        displayName: 'Updated Member',
+        role: FamilyRole.admin,
+        memberProfile: added.memberProfile.copyWith(monthlyIncome: 95000),
+      );
+      expect(updateOk, isTrue);
+
+      final famAfterUpdate = adminProvider.allFamilies.firstWhere((f) => f.family.id == famId);
+      final updated = famAfterUpdate.members.firstWhere((m) => m.userId == added.userId);
+      expect(updated.displayName, 'Updated Member');
+      expect(updated.role, FamilyRole.admin);
+      expect(updated.memberProfile.monthlyIncome, 95000);
+
+      // 3. Remove member
+      final removeOk = await adminProvider.removeMemberFromFamily(
+        famId,
+        added.userId,
+      );
+      expect(removeOk, isTrue);
+
+      final famAfterRemove = adminProvider.allFamilies.firstWhere((f) => f.family.id == famId);
+      expect(famAfterRemove.members.any((m) => m.userId == added.userId), isFalse);
     });
   });
 
