@@ -156,7 +156,7 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['globalInflation', 'globalReturn', 'today']) ||
           isValidFamilySettings(request.resource.data)
         );
-      allow delete: if isFamilyAdmin(familyId);
+      allow delete: if isFamilyAdmin(familyId) || isSuperAdmin();
 
       match /members/{memberId} {
         allow read: if isFamilyMember(familyId) || isSuperAdmin();
@@ -170,26 +170,27 @@ service cloud.firestore {
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberProfile']) &&
             isValidMemberProfile(request.resource.data.memberProfile))
         );
-        allow delete: if isFamilyAdmin(familyId) &&
-          memberId != get(/databases/$(database)/documents/families/$(familyId)).data.adminId;
+        allow delete: if (isFamilyAdmin(familyId) &&
+          memberId != get(/databases/$(database)/documents/families/$(familyId)).data.adminId) ||
+          isSuperAdmin();
       }
 
       match /goals/{goalId} {
         allow read: if isFamilyMember(familyId) || isSuperAdmin();
         allow create, update: if isFamilyMember(familyId) && isValidGoal(request.resource.data);
-        allow delete: if isFamilyMember(familyId);
+        allow delete: if isFamilyMember(familyId) || isSuperAdmin();
       }
 
       match /invites/{inviteId} {
-        allow read: if isFamilyAdmin(familyId);
+        allow read: if isFamilyAdmin(familyId) || isSuperAdmin();
         allow create, update: if isFamilyAdmin(familyId);
-        allow delete: if isFamilyAdmin(familyId);
+        allow delete: if isFamilyAdmin(familyId) || isSuperAdmin();
       }
 
       match /notifications/{notificationId} {
-        allow read: if isFamilyMember(familyId);
+        allow read: if isFamilyMember(familyId) || isSuperAdmin();
         allow create, update: if isFamilyMember(familyId) && isValidNotification(request.resource.data);
-        allow delete: if isFamilyMember(familyId);
+        allow delete: if isFamilyMember(familyId) || isFamilyAdmin(familyId) || isSuperAdmin();
       }
     }
 

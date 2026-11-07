@@ -221,6 +221,24 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> deleteFamily(String familyId, [GoalProvider? goalProvider]) async {
+    _isLoadingFamilies = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      await _service.deleteFamily(familyId, pin: _config.adminPin);
+      _allFamilies.removeWhere((f) => f.family.id == familyId);
+      _lastSuccess = 'Family deleted successfully!';
+      return true;
+    } catch (e) {
+      _lastError = 'Failed to delete family: $e';
+      return false;
+    } finally {
+      _isLoadingFamilies = false;
+      notifyListeners();
+    }
+  }
+
   void clearMessages() {
     _lastError = null;
     _lastSuccess = null;

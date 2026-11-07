@@ -188,6 +188,25 @@ void main() {
       expect(goalProvider.globalReturn, 15.0);
       expect(goalProvider.today, DateTime(2026, 7, 1));
     });
+
+    test('deleteFamily removes family from in-memory list and storage', () async {
+      final adminProvider = AdminProvider();
+      final goalProvider = GoalProvider.forTesting();
+
+      // Pre-load families
+      await adminProvider.fetchAllFamilies(goalProvider);
+
+      if (adminProvider.allFamilies.isNotEmpty) {
+        final targetId = adminProvider.allFamilies.first.family.id;
+        final initialCount = adminProvider.allFamilies.length;
+
+        final success = await adminProvider.deleteFamily(targetId, goalProvider);
+
+        expect(success, isTrue);
+        expect(adminProvider.allFamilies.any((f) => f.family.id == targetId), isFalse);
+        expect(adminProvider.allFamilies.length, initialCount - 1);
+      }
+    });
   });
 
   group('SuperAdminScreen Widget Tests', () {

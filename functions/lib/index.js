@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAllFamiliesAdmin = exports.scheduledDailyNotifications = exports.generateNotification = void 0;
+exports.deleteFamilyAdmin = exports.getAllFamiliesAdmin = exports.scheduledDailyNotifications = exports.generateNotification = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
@@ -232,5 +232,32 @@ exports.getAllFamiliesAdmin = (0, https_1.onCall)({
         };
     }));
     return { families: results };
+});
+exports.deleteFamilyAdmin = (0, https_1.onCall)({
+    region: "asia-south1",
+}, async (request) => {
+    const userEmail = request.auth?.token?.email?.toLowerCase() ?? "";
+    const isSuperAdminEmail = userEmail === "ankur.kus1@gmail.com" ||
+        userEmail === "admin@lifegoal.ai" ||
+        userEmail === "ankurkushwaha@gmail.com" ||
+        userEmail.endsWith("@lifegoal.ai");
+    const pin = request.data?.pin ?? "";
+    const isPinValid = pin === "8899";
+    if (!isSuperAdminEmail && !isPinValid) {
+        throw new https_1.HttpsError("permission-denied", "Only super admin with authorized email or master PIN can delete families.");
+    }
+    const familyId = request.data?.familyId;
+    if (!familyId || typeof familyId !== "string" || familyId.trim().length === 0) {
+        throw new https_1.HttpsError("invalid-argument", "Valid familyId is required.");
+    }
+    const firestore = db();
+    const familyRef = firestore.collection("families").doc(familyId);
+    const familyDoc = await familyRef.get();
+    if (!familyDoc.exists) {
+        return { success: true, message: "Family not found or already deleted." };
+    }
+    // Delete family and all nested subcollections recursively
+    await firestore.recursiveDelete(familyRef);
+    return { success: true, familyId };
 });
 //# sourceMappingURL=index.js.map

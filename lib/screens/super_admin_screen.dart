@@ -887,7 +887,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          initiallyExpanded: true,
+          initiallyExpanded: false,
           tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           childrenPadding:
               const EdgeInsets.only(left: 16, right: 16, bottom: 16),
@@ -923,6 +923,14 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                   'ID: ${family.id}',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
                 ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                tooltip: 'Delete Family',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => _confirmDeleteFamily(context, fam, adminProvider, goalProvider),
               ),
             ],
           ),
@@ -1066,8 +1074,17 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
 
             // Quick Actions Bar
             Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                  ),
+                  onPressed: () => _confirmDeleteFamily(context, fam, adminProvider, goalProvider),
+                  icon: const Icon(Icons.delete_outline, size: 15),
+                  label: const Text('Delete Family',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                ),
                 TextButton.icon(
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: family.id));
@@ -1085,6 +1102,105 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteFamily(
+    BuildContext context,
+    FamilyOverviewData fam,
+    AdminProvider adminProvider,
+    GoalProvider goalProvider,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.warning_amber_rounded,
+                  color: Colors.redAccent, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Delete Family',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text.rich(
+              TextSpan(
+                text: 'Are you sure you want to permanently delete ',
+                children: [
+                  TextSpan(
+                    text: fam.family.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const TextSpan(text: '?\n\nThis will remove:'),
+                ],
+              ),
+              style: const TextStyle(fontSize: 14, height: 1.4),
+            ),
+            const SizedBox(height: 8),
+            Text('• ${fam.members.length} registered member(s)',
+                style: const TextStyle(fontSize: 13, color: Colors.black87)),
+            Text('• ${fam.goals.length} tracked goal(s)',
+                style: const TextStyle(fontSize: 13, color: Colors.black87)),
+            Text('• All invite links and notifications',
+                style: const TextStyle(fontSize: 13, color: Colors.black87)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: const Text(
+                'This action is irreversible and immediately wipes all family data from Cloud Firestore and local storage.',
+                style: TextStyle(fontSize: 12, color: Colors.redAccent),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final success =
+          await adminProvider.deleteFamily(fam.family.id, goalProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success
+                ? 'Deleted "${fam.family.name}" permanently.'
+                : 'Failed to delete family: ${adminProvider.lastError ?? "Unknown error"}'),
+            backgroundColor: success ? kMoneyGreen : Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildMiniBadge({

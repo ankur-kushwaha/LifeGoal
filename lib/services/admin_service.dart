@@ -349,4 +349,85 @@ class AdminService {
 
     return familiesMap.values.toList();
   }
+
+  /// Deletes a family and all its members and goals as Super Admin.
+  Future<void> deleteFamily(String familyId, {String? pin}) async {
+    bool deletedInCloud = false;
+
+    // 1. Try recursive delete via Cloud Function
+    if (DefaultFirebaseOptions.isConfigured) {
+      try {
+        final functions = FirebaseFunctions.instanceFor(
+          app: Firebase.app(),
+          region: 'asia-south1',
+        );
+        final callable = functions.httpsCallable(
+          'deleteFamilyAdmin',
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 25)),
+        );
+        final res = await callable.call<Map<String, dynamic>>({
+          'familyId': familyId,
+          'pin': ?pin,
+        });
+        final data = Map<String, dynamic>.from(res.data);
+        if (data['success'] == true) {
+          deletedInCloud = true;
+        }
+      } catch (e) {
+        debugPrint('Cloud Function deleteFamilyAdmin exception: $e');
+      }
+    }
+
+    // 2. Direct Firestore fallback if Cloud Function didn't execute
+    if (!deletedInCloud && DefaultFirebaseOptions.isConfigured) {
+      try {
+        final firestore = FirebaseFirestore.instanceFor(
+          app: Firebase.app(),
+          databaseId: kFirestoreDatabaseId,
+        );
+
+        final famRef = firestore.collection('families').doc(familyId);
+
+        // Delete members
+        final membersSnap = await famRef.collection('members').get();
+        for (final doc in membersSnap.docs) {
+          await doc.reference.delete();
+        }
+
+        // Delete goals
+        final goalsSnap = await famRef.collection('goals').get();
+        for (final doc in goalsSnap.docs) {
+          await doc.reference.delete();
+        }
+
+        // Delete invites
+        final invitesSnap = await famRef.collection('invites').get();
+        for (final doc in invitesSnap.docs) {
+          await doc.reference.delete();
+        }
+
+        // Delete notifications
+        final notifsSnap = await famRef.collection('notifications').get();
+        for (final doc in notifsSnap.docs) {
+          await doc.reference.delete();
+        }
+
+        await famRef.delete();
+      } catch (e) {
+        debugPrint('Direct Firestore family delete exception: $e');
+      }
+    }
+
+    // 3. Clear local SharedPreferences entries for this family
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('family_$familyId');
+      await prefs.remove('members_$familyId');
+      await prefs.remove('goalsList_$familyId');
+      await prefs.remove('family_profile_$familyId');
+      await prefs.remove('settings_$familyId');
+    } catch (e) {
+      debugPrint('Local family cleanup exception: $e');
+    }
+  }
 }

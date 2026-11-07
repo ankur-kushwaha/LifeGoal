@@ -264,3 +264,45 @@ export const getAllFamiliesAdmin = onCall(
     return { families: results };
   },
 );
+
+export const deleteFamilyAdmin = onCall(
+  {
+    region: "asia-south1",
+  },
+  async (request) => {
+    const userEmail = request.auth?.token?.email?.toLowerCase() ?? "";
+    const isSuperAdminEmail =
+      userEmail === "ankur.kus1@gmail.com" ||
+      userEmail === "admin@lifegoal.ai" ||
+      userEmail === "ankurkushwaha@gmail.com" ||
+      userEmail.endsWith("@lifegoal.ai");
+
+    const pin = (request.data?.pin as string | undefined) ?? "";
+    const isPinValid = pin === "8899";
+
+    if (!isSuperAdminEmail && !isPinValid) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only super admin with authorized email or master PIN can delete families.",
+      );
+    }
+
+    const familyId = request.data?.familyId as string | undefined;
+    if (!familyId || typeof familyId !== "string" || familyId.trim().length === 0) {
+      throw new HttpsError("invalid-argument", "Valid familyId is required.");
+    }
+
+    const firestore = db();
+    const familyRef = firestore.collection("families").doc(familyId);
+    const familyDoc = await familyRef.get();
+
+    if (!familyDoc.exists) {
+      return { success: true, message: "Family not found or already deleted." };
+    }
+
+    // Delete family and all nested subcollections recursively
+    await firestore.recursiveDelete(familyRef);
+
+    return { success: true, familyId };
+  },
+);
