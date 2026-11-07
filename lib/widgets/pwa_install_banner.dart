@@ -73,7 +73,7 @@ class _PwaInstallBannerState extends State<PwaInstallBanner> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Install LifeGoal AI',
+                  'Install LifeGoal',
                   style: TextStyle(
                     color: Colors.black87,
                     fontWeight: FontWeight.bold,

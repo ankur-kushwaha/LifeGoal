@@ -259,7 +259,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                   Tab(icon: Icon(Icons.dashboard_outlined), text: 'Overview'),
                   Tab(icon: Icon(Icons.people_alt_outlined), text: 'All Families'),
                   Tab(icon: Icon(Icons.show_chart), text: 'Financial Engine'),
-                  Tab(icon: Icon(Icons.auto_awesome), text: 'AI & Notifications'),
+                  Tab(icon: Icon(Icons.notifications_active_outlined), text: 'Notification Engine'),
                   Tab(icon: Icon(Icons.flag_outlined), text: 'Feature Flags'),
                   Tab(icon: Icon(Icons.build_outlined), text: 'Data Tools'),
                 ],
@@ -276,7 +276,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                     _buildOverviewTab(adminProvider, goalProvider),
                     _buildAllFamiliesTab(adminProvider, goalProvider),
                     _buildFinancialEngineTab(adminProvider, goalProvider),
-                    _buildAiNotificationTab(adminProvider, goalProvider),
+                    _buildNotificationTab(adminProvider, goalProvider),
                     _buildFeatureFlagsTab(adminProvider),
                     _buildDataToolsTab(adminProvider, goalProvider),
                   ],
@@ -333,7 +333,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
               ),
               const SizedBox(height: 8),
               const Text(
-                'Enter the Super Admin PIN to configure global parameters, AI models, financial defaults, and feature flags.',
+                'Enter the Super Admin PIN to configure global parameters, financial defaults, notifications, and feature flags.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.black54, fontSize: 13, height: 1.4),
               ),
@@ -502,7 +502,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'AI Provider: ${_aiProvider.toUpperCase()} (${_forceLocalAI ? "Fallback Local AI" : _aiModel}) • Active Family: $familyName',
+                      'Notification Engine: Financial Mathematics • Active Family: $familyName',
                       style: const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
@@ -2464,150 +2464,45 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // TAB 3: AI & NOTIFICATIONS
+  // TAB 3: NOTIFICATION ENGINE (MATHEMATICAL)
   // ---------------------------------------------------------------------------
-  Widget _buildAiNotificationTab(
+  Widget _buildNotificationTab(
       AdminProvider adminProvider, GoalProvider goalProvider) {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
         _buildInfoBanner(
-          'Configure AI notification providers, model identifiers, secret overrides, advisor tone, and test real-time AI recommendation generation.',
+          'Notifications are computed using deterministic financial mathematics based on goals, target dates, monthly salary/income, loan EMIs, and expenses. Triggered automatically on a weekly schedule.',
         ),
         const SizedBox(height: 16),
 
         _buildSectionCard(
-          title: 'AI Model & Provider Architecture',
+          title: 'Mathematical Calculation Engine',
           children: [
-            // Provider Selection
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('AI Provider Engine',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                    Text('Select backend provider for intelligence generation',
-                        style: TextStyle(color: Colors.black45, fontSize: 12)),
-                  ],
-                ),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'openrouter', label: Text('OpenRouter')),
-                    ButtonSegment(value: 'local', label: Text('Local Mock')),
-                    ButtonSegment(value: 'gemini', label: Text('Gemini API')),
-                  ],
-                  selected: {_aiProvider},
-                  onSelectionChanged: (val) {
-                    setState(() => _aiProvider = val.first);
-                  },
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-
-            // AI Model ID
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Model Identifier',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                const SizedBox(height: 4),
-                const Text('Specify OpenRouter or LLM model endpoint name',
-                    style: TextStyle(color: Colors.black45, fontSize: 12)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _buildModelChip('google/gemini-2.5-flash'),
-                    _buildModelChip('google/gemini-2.5-pro'),
-                    _buildModelChip('anthropic/claude-3.5-sonnet'),
-                    _buildModelChip('meta-llama/llama-3.3-70b-instruct'),
-                  ],
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-
-            // Custom OpenRouter Key Override
-            TextField(
-              controller: _apiKeyController,
-              decoration: InputDecoration(
-                labelText: 'OpenRouter API Key Override (Optional)',
-                hintText: 'sk-or-v1-... (leave blank to use Cloud Function secret)',
-                prefixIcon: const Icon(Icons.key, color: Colors.blueAccent),
-                filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
             const Text(
-              'If the Cloud Function secret has expired or thrown 401, entering a valid key here can be used for debugging or direct calls.',
-              style: TextStyle(fontSize: 12, color: Colors.black45),
+              'All notifications and recommendations are computed mathematically with zero external AI/LLM dependency.',
+              style: TextStyle(color: Colors.black87, fontSize: 13, height: 1.4),
             ),
-            const Divider(height: 24),
-
-            // Force Local AI Fallback Switch
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Force Local AI Fallback',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              subtitle: const Text(
-                'Immediately use deterministic rule-based generator without contacting external APIs (ideal for offline or when OpenRouter returns 401).',
-                style: TextStyle(color: Colors.black54, fontSize: 12),
-              ),
-              value: _forceLocalAI,
-              activeTrackColor: kMoneyGreen,
-              onChanged: (val) => setState(() => _forceLocalAI = val),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildMathBadge(Icons.event_outlined, 'Target Dates & Months Remaining'),
+                _buildMathBadge(Icons.account_balance_wallet_outlined, 'Monthly Salary / Income'),
+                _buildMathBadge(Icons.credit_card_outlined, 'Loan EMIs & Debt-to-Income'),
+                _buildMathBadge(Icons.trending_up, 'Inflation-Adjusted SIP Gap'),
+                _buildMathBadge(Icons.savings_outlined, 'Surplus vs Deficit Analysis'),
+                _buildMathBadge(Icons.security, 'Emergency Fund Buffer'),
+              ],
             ),
           ],
         ),
         const SizedBox(height: 16),
 
         _buildSectionCard(
-          title: 'Advisor Tone & Automation Schedule',
+          title: 'Automation & Weekly Trigger Schedule',
           children: [
-            // AI Tone
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Advisor Persona & Tone',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                    Text('Sets the style of AI suggestions generated',
-                        style: TextStyle(color: Colors.black45, fontSize: 12)),
-                  ],
-                ),
-                DropdownButton<String>(
-                  value: _aiAdvisorTone,
-                  underline: const SizedBox.shrink(),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'balanced', child: Text('Balanced & Motivational')),
-                    DropdownMenuItem(
-                        value: 'conservative', child: Text('Strict & Conservative')),
-                    DropdownMenuItem(
-                        value: 'growth', child: Text('Aggressive Wealth Builder')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) setState(() => _aiAdvisorTone = val);
-                  },
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-
             // Scheduled Hour
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2615,9 +2510,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                 const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Daily Trigger Schedule',
+                    Text('Weekly Schedule Time',
                         style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                    Text('Time when daily check-in recommendations are dispatched',
+                    Text('Dispatched weekly every Monday at this time',
                         style: TextStyle(color: Colors.black45, fontSize: 12)),
                   ],
                 ),
@@ -2650,10 +2545,10 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
 
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Auto-Trigger Scheduled Notifications',
+              title: const Text('Auto-Trigger Weekly Notifications',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
               subtitle: const Text(
-                'Automatically execute recommendation generation at scheduled daily time',
+                'Automatically execute weekly financial check-in at the scheduled time',
                 style: TextStyle(color: Colors.black54, fontSize: 12),
               ),
               value: _autoNotifications,
@@ -2666,10 +2561,10 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
 
         // Live Test Generator Card
         _buildSectionCard(
-          title: 'Interactive AI Generation Test',
+          title: 'Interactive Notification Computation Test',
           children: [
             const Text(
-              'Test notification generation live using current portfolio data and selected AI configuration.',
+              'Test notification computation live using current family portfolio data (goals, salary, expenses, and EMIs).',
               style: TextStyle(color: Colors.black54, fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -2689,18 +2584,18 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                     : () async {
                         setState(() => _isTestingAi = true);
                         try {
-                          // Temporary apply local state into provider
+                          // Apply local state into provider
                           adminProvider.updateInMemory(
                               _buildCurrentConfig(adminProvider.config));
                           final note =
-                              await adminProvider.testAiNotification(goalProvider);
+                              await adminProvider.testNotification(goalProvider);
                           setState(() {
                             _testedNotification = note;
                           });
                         } catch (e) {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Test AI error: $e')),
+                              SnackBar(content: Text('Test computation error: $e')),
                             );
                           }
                         } finally {
@@ -2716,9 +2611,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                           strokeWidth: 2,
                         ),
                       )
-                    : const Icon(Icons.play_arrow_rounded, size: 20),
+                    : const Icon(Icons.calculate_outlined, size: 20),
                 label: Text(
-                  _isTestingAi ? 'Running AI Generator...' : 'Execute Test AI Generation',
+                  _isTestingAi ? 'Computing Notification...' : 'Execute Test Notification',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
@@ -2737,7 +2632,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.lightbulb_outline,
+                        const Icon(Icons.calculate_outlined,
                             color: kMoneyGreen, size: 18),
                         const SizedBox(width: 8),
                         Expanded(
@@ -2809,17 +2704,29 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
     );
   }
 
-  Widget _buildModelChip(String modelName) {
-    final isSelected = _aiModel == modelName;
-    return ChoiceChip(
-      label: Text(modelName, style: const TextStyle(fontSize: 12)),
-      selected: isSelected,
-      selectedColor: kMoneyGreen.withValues(alpha: 0.15),
-      labelStyle: TextStyle(
-        color: isSelected ? kMoneyGreen : Colors.black87,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+  Widget _buildMathBadge(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blueGrey.shade100),
       ),
-      onSelected: (_) => setState(() => _aiModel = modelName),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: kMoneyGreen),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF334155),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -3280,7 +3187,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
       builder: (context) => AlertDialog(
         title: const Text('Reset to Factory Defaults?'),
         content: const Text(
-          'This will reset all Super Admin configurations (inflation, returns, AI models, feature flags) back to system default values.',
+          'This will reset all Super Admin configurations (inflation, returns, notifications, feature flags) back to system default values.',
         ),
         actions: [
           TextButton(

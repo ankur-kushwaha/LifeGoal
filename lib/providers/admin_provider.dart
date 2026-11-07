@@ -148,62 +148,31 @@ class AdminProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Live test generation of AI notification using configured settings
-  Future<AppNotification> testAiNotification(GoalProvider goalProvider) async {
+  /// Live test generation of financial notification using mathematical computation engine
+  Future<AppNotification> testNotification(GoalProvider goalProvider) async {
     final goals = goalProvider.goals;
+    final familyProfile = goalProvider.familyProfile;
     final today = _config.defaultPlanningDate;
 
-    if (_config.forceLocalAIFallback || _config.aiProvider == 'local') {
-      final localAI = LocalAIService();
-      return localAI.generate(
-        goals: goals,
-        recentNotifications: const [],
-        trigger: NotificationTrigger.custom,
-        eventName: 'admin_test_trigger',
-        today: today,
-        globalInflation: _config.defaultInflationRate,
-        globalReturn: _config.defaultExpectedReturn,
-      );
-    }
-
-    try {
-      final aiService = AINotificationService();
-      final result = await aiService.generate(
-        familyId: goalProvider.currentFamilyId ?? 'admin-test-family',
-        goals: goals,
-        recentNotifications: const [],
-        trigger: NotificationTrigger.custom,
-        eventName: 'admin_test_trigger',
-        today: today,
-        globalInflation: _config.defaultInflationRate,
-        globalReturn: _config.defaultExpectedReturn,
-        useCloud: !_config.forceLocalAIFallback,
-      );
-      return result.notification;
-    } catch (e) {
-      // Fallback to local AI with debug notification
-      final localAI = LocalAIService();
-      final localNote = localAI.generate(
-        goals: goals,
-        recentNotifications: const [],
-        trigger: NotificationTrigger.custom,
-        eventName: 'admin_test_trigger',
-        today: today,
-        globalInflation: _config.defaultInflationRate,
-        globalReturn: _config.defaultExpectedReturn,
-      );
-      return AppNotification(
-        id: 'test-${DateTime.now().millisecondsSinceEpoch}',
-        title: '${localNote.title} (Fallback AI)',
-        body: '${localNote.body}\n[Cloud AI Note: $e]',
-        suggestedAction: localNote.suggestedAction,
-        trigger: NotificationTrigger.custom,
-        createdAt: DateTime.now(),
-        isRead: false,
-        isAiGenerated: true,
-      );
-    }
+    final generatorService = NotificationGeneratorService();
+    final result = await generatorService.generate(
+      familyId: goalProvider.currentFamilyId ?? 'admin-test-family',
+      goals: goals,
+      familyProfile: familyProfile,
+      recentNotifications: const [],
+      trigger: NotificationTrigger.custom,
+      eventName: 'admin_test_trigger',
+      today: today,
+      globalInflation: _config.defaultInflationRate,
+      globalReturn: _config.defaultExpectedReturn,
+      useCloud: true,
+    );
+    return result.notification;
   }
+
+  // Backward-compatible alias
+  Future<AppNotification> testAiNotification(GoalProvider goalProvider) =>
+      testNotification(goalProvider);
 
   Future<void> fetchAllFamilies(GoalProvider goalProvider) async {
     _isLoadingFamilies = true;

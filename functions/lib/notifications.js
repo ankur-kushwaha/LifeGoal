@@ -68,7 +68,7 @@ async function saveNotification(familyId, data) {
         trigger: data.trigger,
         createdAt: new Date().toISOString(),
         isRead: false,
-        isAiGenerated: true,
+        isAiGenerated: false,
     };
     if (data.eventName) {
         notification.eventName = data.eventName;

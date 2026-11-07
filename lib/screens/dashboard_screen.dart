@@ -73,7 +73,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const AppLogo(size: 28, showBackground: false),
                 const SizedBox(width: 8),
                 Text(
-                  'LifeGoal AI',
+                  'LifeGoal',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: Colors.black87,
                     fontWeight: FontWeight.bold,
@@ -90,7 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               IconButton(
                 icon: const Icon(Icons.notifications_outlined, color: kMoneyGreen),
-                tooltip: 'AI Suggestions',
+                tooltip: 'Goal Notifications',
                 onPressed: () {
                   Navigator.push(
                     context,
@@ -272,7 +272,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                             ),
                             Text(
-                              'System & AI Config',
+                              'System & Admin Config',
                               style: TextStyle(
                                 color: Colors.black45,
                                 fontSize: 11,

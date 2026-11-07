@@ -19,7 +19,7 @@ class NotificationsScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: kCardBg,
         elevation: 0,
-        title: const Text('AI Suggestions', style: TextStyle(color: Colors.black87)),
+        title: const Text('Goal Notifications', style: TextStyle(color: Colors.black87)),
         actions: [
           if (provider.notifications.isNotEmpty)
             PopupMenuButton<String>(
@@ -109,7 +109,7 @@ class NotificationsScreen extends StatelessWidget {
                 : ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: provider.notifications.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final notification = provider.notifications[index];
                       return _NotificationCard(
@@ -135,9 +135,9 @@ class NotificationsScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: kCardBg,
-        title: const Text('Clear all suggestions?', style: TextStyle(color: Colors.black87)),
+        title: const Text('Clear all notifications?', style: TextStyle(color: Colors.black87)),
         content: const Text(
-          'This will permanently delete all AI suggestions for your family.',
+          'This will permanently delete all goal notifications for your family.',
           style: TextStyle(color: Colors.black87),
         ),
         actions: [
@@ -163,7 +163,7 @@ class NotificationsScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Get a personalized next action based on your goals.',
+            'Financial insights computed based on your goals, target dates, EMIs, and salary.',
             style: TextStyle(color: Colors.black54, fontSize: 13),
           ),
           const SizedBox(height: 12),
@@ -175,8 +175,8 @@ class NotificationsScreen extends StatelessWidget {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Icon(Icons.auto_awesome, size: 20),
-            label: Text(provider.isGenerating ? 'Generating...' : 'Get AI Suggestion Now'),
+                : const Icon(Icons.calculate_outlined, size: 20),
+            label: Text(provider.isGenerating ? 'Calculating...' : 'Check Goals Now'),
             style: FilledButton.styleFrom(
               backgroundColor: kMoneyGreen,
               foregroundColor: Colors.white,
@@ -198,12 +198,12 @@ class NotificationsScreen extends StatelessWidget {
             Icon(Icons.notifications_none, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
-              'No suggestions yet',
+              'No notifications yet',
               style: theme.textTheme.titleMedium?.copyWith(color: Colors.black87),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Tap the button above or wait for your daily 10 AM suggestion.',
+              'Tap the button above or wait for your weekly Monday notification.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.black54),
             ),
@@ -276,8 +276,6 @@ class _NotificationCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (notification.isAiGenerated) const _AiChip(),
-                  const SizedBox(width: 6),
                   _TriggerChip(label: triggerLabel),
                   IconButton(
                     icon: Icon(Icons.close, size: 18, color: Colors.grey.shade500),
@@ -375,32 +373,6 @@ class _NotificationCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _AiChip extends StatelessWidget {
-  const _AiChip();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: kMoneyGreen.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.auto_awesome, size: 12, color: kMoneyGreen),
-          SizedBox(width: 4),
-          Text(
-            'AI',
-            style: TextStyle(fontSize: 11, color: kMoneyGreen, fontWeight: FontWeight.w600),
-          ),
-        ],
       ),
     );
   }

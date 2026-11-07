@@ -358,7 +358,7 @@ void main() {
       expect(find.text('Overview'), findsOneWidget);
       expect(find.text('All Families'), findsOneWidget);
       expect(find.text('Financial Engine'), findsOneWidget);
-      expect(find.text('AI & Notifications'), findsOneWidget);
+      expect(find.text('Notification Engine'), findsOneWidget);
       expect(find.text('Feature Flags'), findsOneWidget);
       expect(find.text('Data Tools'), findsOneWidget);
 
@@ -385,13 +385,13 @@ void main() {
       expect(find.text('Apply System Defaults to Current Active Family'),
           findsOneWidget);
 
-      // Tap AI & Notifications tab
-      await tester.tap(find.text('AI & Notifications'));
+      // Tap Notification Engine tab
+      await tester.tap(find.text('Notification Engine'));
       await tester.pumpAndSettle();
 
-      expect(find.text('AI Model & Provider Architecture'), findsOneWidget);
-      expect(find.text('Force Local AI Fallback'), findsOneWidget);
-      expect(find.text('Execute Test AI Generation'), findsOneWidget);
+      expect(find.text('Mathematical Calculation Engine'), findsOneWidget);
+      expect(find.text('Auto-Trigger Weekly Notifications'), findsOneWidget);
+      expect(find.text('Execute Test Notification'), findsOneWidget);
 
       // Tap Feature Flags tab
       await tester.tap(find.text('Feature Flags'));

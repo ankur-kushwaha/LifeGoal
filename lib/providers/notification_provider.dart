@@ -15,7 +15,7 @@ class NotificationProvider extends ChangeNotifier {
   String? _error;
 
   late BaseNotificationService _notificationService;
-  final AINotificationService _aiService = AINotificationService();
+  final NotificationGeneratorService _generatorService = NotificationGeneratorService();
   final LocalNotificationScheduler _scheduler = LocalNotificationScheduler();
 
   GoalProvider? _goalProvider;
@@ -44,7 +44,7 @@ class NotificationProvider extends ChangeNotifier {
         }
       },
     );
-    await _scheduler.scheduleDailyAt10AM();
+    await _scheduler.scheduleWeeklyAt10AM();
   }
 
   void attachToGoalProvider(GoalProvider goalProvider) {
@@ -83,8 +83,6 @@ class NotificationProvider extends ChangeNotifier {
 
     final recent = await _notificationService.getRecentNotifications(_familyId!, limit: 10);
     final now = DateTime.now();
-    final today10AM = DateTime(now.year, now.month, now.day, 10);
-    if (now.isBefore(today10AM)) return;
 
     final lastScheduled = recent
         .where((n) => n.trigger == NotificationTrigger.scheduled)
@@ -93,7 +91,10 @@ class NotificationProvider extends ChangeNotifier {
       return latest;
     });
 
-    if (lastScheduled != null && !lastScheduled.isBefore(today10AM)) return;
+    // Run on schedule once a week (every 7 days)
+    if (lastScheduled != null && now.difference(lastScheduled).inDays < 7) {
+      return;
+    }
 
     await triggerScheduled(silent: true);
   }
@@ -101,7 +102,7 @@ class NotificationProvider extends ChangeNotifier {
   Future<AppNotification?> triggerScheduled({bool silent = false}) {
     return _generate(
       trigger: NotificationTrigger.scheduled,
-      eventName: 'scheduled_10am',
+      eventName: 'scheduled_weekly_10am',
       silent: silent,
     );
   }
@@ -135,12 +136,13 @@ class NotificationProvider extends ChangeNotifier {
     if (trigger != NotificationTrigger.event &&
         _lastGeneratedAt != null &&
         DateTime.now().difference(_lastGeneratedAt!) < _generationCooldown) {
-      _error = 'Please wait a moment before requesting another suggestion.';
+      _error = 'Please wait a moment before requesting another calculation.';
       notifyListeners();
       return null;
     }
 
     final goals = _goalProvider!.goals;
+    final familyProfile = _goalProvider!.familyProfile;
     final today = _goalProvider!.today;
     final inflation = _goalProvider!.globalInflation;
     final globalReturn = _goalProvider!.globalReturn;
@@ -151,9 +153,10 @@ class NotificationProvider extends ChangeNotifier {
 
     try {
       final recent = await _notificationService.getRecentNotifications(_familyId!, limit: 5);
-      final result = await _aiService.generate(
+      final result = await _generatorService.generate(
         familyId: _familyId!,
         goals: goals,
+        familyProfile: familyProfile,
         recentNotifications: recent,
         trigger: trigger,
         eventName: eventName,
@@ -180,7 +183,7 @@ class NotificationProvider extends ChangeNotifier {
 
       return result.notification;
     } on FirebaseFunctionsException catch (e) {
-      _error = e.message ?? 'AI service error (${e.code})';
+      _error = e.message ?? 'Notification computation error (${e.code})';
       debugPrint('Notification generation failed: ${e.code} ${e.message}');
       return null;
     } catch (e) {

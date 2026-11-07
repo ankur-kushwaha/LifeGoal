@@ -4,24 +4,30 @@ import 'package:flutter/foundation.dart';
 import '../firebase_options.dart';
 import '../models/goal_model.dart';
 import '../models/notification_model.dart';
-import 'local_ai_service.dart';
+import '../models/profile_model.dart';
+import 'financial_math_service.dart';
 
-class AIGenerationResult {
+class NotificationGenerationResult {
   final AppNotification notification;
   final bool savedRemotely;
 
-  const AIGenerationResult({
+  const NotificationGenerationResult({
     required this.notification,
     required this.savedRemotely,
   });
 }
 
-class AINotificationService {
-  final LocalAIService _localAI = LocalAIService();
+// Backward-compatible typedef
+typedef AIGenerationResult = NotificationGenerationResult;
 
-  Future<AIGenerationResult> generate({
+/// Service that delegates notification generation to Cloud Functions or local FinancialMathService.
+class NotificationGeneratorService {
+  final FinancialMathService _mathService = FinancialMathService();
+
+  Future<NotificationGenerationResult> generate({
     required String familyId,
     required List<GoalModel> goals,
+    FamilyProfile? familyProfile,
     required List<AppNotification> recentNotifications,
     required NotificationTrigger trigger,
     String? eventName,
@@ -39,7 +45,7 @@ class AINotificationService {
         );
         final callable = functions.httpsCallable(
           'generateNotification',
-          options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
         );
         final result = await callable.call<Map<String, dynamic>>({
           'familyId': familyId,
@@ -49,28 +55,22 @@ class AINotificationService {
         });
         final data = Map<String, dynamic>.from(result.data);
         if (data['notification'] != null) {
-          return AIGenerationResult(
+          return NotificationGenerationResult(
             notification: AppNotification.fromJson(
               Map<String, dynamic>.from(data['notification'] as Map),
             ),
             savedRemotely: true,
           );
         }
-        throw FirebaseFunctionsException(
-          code: 'internal',
-          message: 'Cloud function returned no notification',
-        );
-      } on FirebaseFunctionsException {
-        rethrow;
       } catch (e) {
-        debugPrint('Cloud AI notification failed: $e');
-        rethrow;
+        debugPrint('Cloud notification computation failed, using local math engine: $e');
       }
     }
 
-    return AIGenerationResult(
-      notification: _localAI.generate(
+    return NotificationGenerationResult(
+      notification: _mathService.generate(
         goals: goals,
+        familyProfile: familyProfile,
         recentNotifications: recentNotifications,
         trigger: trigger,
         eventName: eventName,
@@ -83,3 +83,6 @@ class AINotificationService {
     );
   }
 }
+
+// Backward-compatible alias
+class AINotificationService extends NotificationGeneratorService {}

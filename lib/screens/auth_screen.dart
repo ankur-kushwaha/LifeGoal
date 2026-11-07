@@ -180,7 +180,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               ),
               const SizedBox(height: 16),
               Text(
-                'LifeGoal AI',
+                'LifeGoal',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,

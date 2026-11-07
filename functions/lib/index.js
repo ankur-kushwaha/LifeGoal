@@ -33,16 +33,14 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.manageFamilyMemberAdmin = exports.deleteFamilyAdmin = exports.getAllFamiliesAdmin = exports.scheduledDailyNotifications = exports.generateNotification = void 0;
+exports.manageFamilyMemberAdmin = exports.deleteFamilyAdmin = exports.getAllFamiliesAdmin = exports.scheduledDailyNotifications = exports.scheduledWeeklyNotifications = exports.generateNotification = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
-const params_1 = require("firebase-functions/params");
-const ai_1 = require("./ai");
+const financial_math_1 = require("./financial_math");
 const notifications_1 = require("./notifications");
 admin.initializeApp();
-const openRouterKey = (0, params_1.defineSecret)("OPENROUTER_API_KEY");
 const db = () => (0, firestore_1.getFirestore)(admin.app(), "lifegoal");
 async function isFamilyMember(familyId, userId) {
     const doc = await db()
@@ -65,7 +63,10 @@ async function generateForFamily(familyId, trigger, eventName, relatedGoalId) {
         .doc(familyId)
         .collection("goals")
         .get();
-    const goals = goalsSnapshot.docs.map((doc) => doc.data());
+    const goals = goalsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+    }));
     const membersSnapshot = await firestore
         .collection("families")
         .doc(familyId)
@@ -82,63 +83,35 @@ async function generateForFamily(familyId, trigger, eventName, relatedGoalId) {
         };
     });
     const recent = await (0, notifications_1.getRecentNotifications)(familyId, 5);
-    const goalContext = (0, ai_1.buildGoalContext)(goals, familyData.globalInflation ?? 6, familyData.globalReturn ?? 14, familyData.today ?? new Date().toISOString());
-    const profileContext = (0, ai_1.buildFamilyProfileContext)(familyData.familyProfile, memberProfiles);
-    const context = goalContext;
-    const apiKey = openRouterKey.value();
-    if (!apiKey) {
-        throw new https_1.HttpsError("failed-precondition", "OPENROUTER_API_KEY secret is not configured");
-    }
-    let aiResult;
-    try {
-        aiResult = await (0, ai_1.generateAINotification)({
-            apiKey,
-            goalContext: context,
-            profileContext,
-            recentNotifications: recent,
-            trigger,
-            eventName,
-            relatedGoalId,
-        });
-        const blockedIds = new Set(recent.map((n) => n.relatedGoalId).filter((id) => Boolean(id)));
-        if (aiResult.relatedGoalId &&
-            blockedIds.has(aiResult.relatedGoalId) &&
-            recent.length > 0) {
-            console.log(`AI repeated goal ${aiResult.relatedGoalId}, retrying with blocked list`);
-            aiResult = await (0, ai_1.generateAINotification)({
-                apiKey,
-                goalContext: context,
-                profileContext,
-                recentNotifications: recent,
-                trigger,
-                eventName,
-                relatedGoalId,
-            });
-        }
-    }
-    catch (error) {
-        const message = error instanceof Error ? error.message : "AI generation failed";
-        console.error("OpenRouter generation failed:", message);
-        throw new https_1.HttpsError("internal", message);
-    }
-    const notification = await (0, notifications_1.saveNotification)(familyId, {
-        title: aiResult.title,
-        body: aiResult.body,
-        suggestedAction: aiResult.suggestedAction,
+    const mathResult = (0, financial_math_1.computeFinancialNotification)({
+        goals,
+        familyProfile: familyData.familyProfile,
+        members: memberProfiles,
+        recentNotifications: recent,
         trigger,
         eventName,
-        relatedGoalId: aiResult.relatedGoalId ?? relatedGoalId,
-        suggestionType: aiResult.suggestionType,
-        suggestedNewGoalName: aiResult.suggestedNewGoalName,
-        suggestedNewGoalTargetCost: aiResult.suggestedNewGoalTargetCost,
-        suggestedNewGoalMonths: aiResult.suggestedNewGoalMonths,
-        suggestedNewGoalAccount: aiResult.suggestedNewGoalAccount,
+        relatedGoalId,
+        globalInflation: familyData.globalInflation ?? 6,
+        globalReturn: familyData.globalReturn ?? 14,
+        todayIso: familyData.today ?? new Date().toISOString(),
+    });
+    const notification = await (0, notifications_1.saveNotification)(familyId, {
+        title: mathResult.title,
+        body: mathResult.body,
+        suggestedAction: mathResult.suggestedAction,
+        trigger,
+        eventName,
+        relatedGoalId: mathResult.relatedGoalId ?? relatedGoalId,
+        suggestionType: mathResult.suggestionType,
+        suggestedNewGoalName: mathResult.suggestedNewGoalName,
+        suggestedNewGoalTargetCost: mathResult.suggestedNewGoalTargetCost,
+        suggestedNewGoalMonths: mathResult.suggestedNewGoalMonths,
+        suggestedNewGoalAccount: mathResult.suggestedNewGoalAccount,
     });
     return notification;
 }
 exports.generateNotification = (0, https_1.onCall)({
     region: "asia-south1",
-    secrets: [openRouterKey],
 }, async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "Sign in required");
@@ -157,22 +130,24 @@ exports.generateNotification = (0, https_1.onCall)({
     const notification = await generateForFamily(familyId, trigger, eventName, relatedGoalId);
     return { notification };
 });
-exports.scheduledDailyNotifications = (0, scheduler_1.onSchedule)({
-    schedule: "0 10 * * *",
+// Scheduled notification runs once a week: every Monday at 10:00 AM IST
+exports.scheduledWeeklyNotifications = (0, scheduler_1.onSchedule)({
+    schedule: "0 10 * * 1",
     timeZone: "Asia/Kolkata",
     region: "asia-south1",
-    secrets: [openRouterKey],
 }, async () => {
     const familiesSnapshot = await db().collection("families").get();
     for (const familyDoc of familiesSnapshot.docs) {
         try {
-            await generateForFamily(familyDoc.id, "scheduled", "scheduled_10am");
+            await generateForFamily(familyDoc.id, "scheduled", "scheduled_weekly_mon_10am");
         }
         catch (error) {
-            console.error(`Scheduled notification failed for ${familyDoc.id}:`, error);
+            console.error(`Scheduled weekly notification failed for ${familyDoc.id}:`, error);
         }
     }
 });
+// Backward-compatible alias for scheduled weekly notifications
+exports.scheduledDailyNotifications = exports.scheduledWeeklyNotifications;
 exports.getAllFamiliesAdmin = (0, https_1.onCall)({
     region: "asia-south1",
 }, async (request) => {

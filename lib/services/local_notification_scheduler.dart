@@ -6,9 +6,9 @@ import 'package:timezone/timezone.dart' as tz;
 typedef NotificationTapCallback = void Function(String? payload);
 
 class LocalNotificationScheduler {
-  static const _channelId = 'lifegoal_ai';
-  static const _channelName = 'LifeGoal AI Suggestions';
-  static const _dailyNotificationId = 1001;
+  static const _channelId = 'lifegoal_notifications';
+  static const _channelName = 'LifeGoal Notifications';
+  static const _scheduledNotificationId = 1001;
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
@@ -45,7 +45,7 @@ class LocalNotificationScheduler {
         const AndroidNotificationChannel(
           _channelId,
           _channelName,
-          description: 'Daily AI-powered financial goal suggestions',
+          description: 'Weekly financial goal progress and SIP updates',
           importance: Importance.high,
         ),
       );
@@ -54,14 +54,17 @@ class LocalNotificationScheduler {
     _initialized = true;
   }
 
-  Future<void> scheduleDailyAt10AM({String? payload}) async {
+  /// Schedules notifications once a week (every Monday at 10:00 AM IST)
+  Future<void> scheduleWeeklyAt10AM({String? payload}) async {
     if (kIsWeb || !_initialized) return;
 
-    await _plugin.cancel(_dailyNotificationId);
+    await _plugin.cancel(_scheduledNotificationId);
 
     final now = tz.TZDateTime.now(tz.local);
     var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, 10);
-    if (scheduled.isBefore(now)) {
+
+    // Find next Monday
+    while (scheduled.weekday != DateTime.monday || scheduled.isBefore(now)) {
       scheduled = scheduled.add(const Duration(days: 1));
     }
 
@@ -69,7 +72,7 @@ class LocalNotificationScheduler {
       android: AndroidNotificationDetails(
         _channelId,
         _channelName,
-        channelDescription: 'Daily AI-powered financial goal suggestions',
+        channelDescription: 'Weekly financial goal progress and SIP updates',
         importance: Importance.high,
         priority: Priority.high,
       ),
@@ -77,17 +80,20 @@ class LocalNotificationScheduler {
     );
 
     await _plugin.zonedSchedule(
-      _dailyNotificationId,
-      'LifeGoal AI',
-      'Your daily financial action suggestion is ready. Tap to view.',
+      _scheduledNotificationId,
+      'LifeGoal',
+      'Your weekly financial goal update is ready. Tap to view your portfolio.',
       scheduled,
       details,
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time,
+      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
       payload: payload ?? 'scheduled',
     );
   }
+
+  // Backward-compatible alias
+  Future<void> scheduleDailyAt10AM({String? payload}) => scheduleWeeklyAt10AM(payload: payload);
 
   Future<void> showInstant({
     required String title,
@@ -100,7 +106,7 @@ class LocalNotificationScheduler {
       android: AndroidNotificationDetails(
         _channelId,
         _channelName,
-        channelDescription: 'AI-powered financial goal suggestions',
+        channelDescription: 'Financial goal progress and SIP updates',
         importance: Importance.high,
         priority: Priority.high,
       ),

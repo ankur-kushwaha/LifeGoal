@@ -71,7 +71,7 @@ export async function saveNotification(
     trigger: data.trigger,
     createdAt: new Date().toISOString(),
     isRead: false,
-    isAiGenerated: true,
+    isAiGenerated: false,
   };
 
   if (data.eventName) {

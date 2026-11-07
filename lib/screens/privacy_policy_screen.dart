@@ -32,7 +32,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           const SizedBox(height: 16),
           _section(
             '1. Who we are',
-            'LifeGoal AI ("LifeGoal", "we", "us") is a financial goal planning application '
+            'LifeGoal ("we", "us") is a financial goal planning application '
             'that helps you track savings goals, calculate SIP requirements, and share plans with your family. '
             'This policy explains how we collect, use, and protect your information when you use our mobile app and website.',
           ),
@@ -84,7 +84,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           ),
           _section(
             '8. Children\'s privacy',
-            'LifeGoal AI is not directed at children under 13. We do not knowingly collect personal information from children. '
+            'LifeGoal is not directed at children under 13. We do not knowingly collect personal information from children. '
             'If you believe a child has provided us data, please contact us and we will delete it.',
           ),
           _section(
@@ -123,7 +123,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               Icon(Icons.privacy_tip_outlined, color: kMoneyGreen, size: 22),
               SizedBox(width: 8),
               Text(
-                'LifeGoal AI Privacy Policy',
+                'LifeGoal Privacy Policy',
                 style: TextStyle(
                   color: Colors.black87,
                   fontWeight: FontWeight.bold,
